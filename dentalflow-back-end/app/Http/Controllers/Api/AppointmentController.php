@@ -9,6 +9,7 @@ use App\Models\Notification;
 use App\Models\Payment;
 use App\Models\Treatment;
 use App\Models\User;
+use App\Notifications\AppointmentBooked;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -108,6 +109,22 @@ class AppointmentController extends Controller
             'end_time'     => $request->end_time,
             'status'       => 'en_attente', // Default status
         ]);
+
+        // Send notification to all admin users
+        $admins = User::where('role', 'admin')->get();
+        $treatment = Treatment::find($request->treatment_id);
+        
+        // Debug: Log the admin users we found
+        \Log::info('Found admin users for notification:', ['count' => $admins->count()]);
+        
+        foreach ($admins as $admin) {
+            if ($admin instanceof User) {
+                \Log::info('Sending notification to admin:', ['admin_id' => $admin->id, 'admin_name' => $admin->name]);
+                $admin->notify(new AppointmentBooked($appointment, $request->user(), $treatment));
+            } else {
+                \Log::warning('Admin is not a User instance:', ['admin' => get_class($admin)]);
+            }
+        }
 
         return response()->json(
             $appointment->load(['treatment', 'doctor', 'patient']),

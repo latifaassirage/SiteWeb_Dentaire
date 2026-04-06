@@ -71,7 +71,7 @@ class InvoiceController extends Controller
 
         $total = Invoice::where('status', 'payé')->sum('amount');
 
-        $unpaid = Invoice::where('status', 'non_payé')->sum('amount');
+        $unpaid = Invoice::where('status', 'non_payé')->count();
 
         return response()->json([
             'today'  => $today,

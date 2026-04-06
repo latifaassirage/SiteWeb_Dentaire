@@ -9,14 +9,29 @@ use App\Http\Controllers\Api\PatientController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\DoctorController;
-use App\Http\Controllers\Api\ClinicSettingController;
 use App\Http\Controllers\Api\TreatmentController;
 
 // Public routes
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login',    [AuthController::class, 'login']);
 Route::get('/treatments', [TreatmentController::class, 'index']);
-Route::get('/clinic-settings', [ClinicSettingController::class, 'index']); // Public access for landing page
+
+Route::get('/clinic-info', function () {
+    return response()->json([
+        'name'    => 'DentalFlow',
+        'email'   => 'contact@dentalflow.com',
+        'phone'   => '+212 6 XX XX XX XX',
+        'address' => 'N° 45, Avenue Mohammed V, Guelmim, Maroc',
+    ]);
+});
+
+Route::get('/services', function () {
+    return response()->json(\App\Models\Service::all());
+});
+
+Route::get('/notifications', function () {
+    return response()->json([]);
+});
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -67,7 +82,4 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/treatments',               [TreatmentController::class, 'store']);
     Route::put('/treatments/{id}',           [TreatmentController::class, 'update']);
     Route::delete('/treatments/{id}',        [TreatmentController::class, 'destroy']);
-
-    // Clinic Settings (Admin only)
-    Route::put('/clinic-settings', [ClinicSettingController::class, 'update']);
 });

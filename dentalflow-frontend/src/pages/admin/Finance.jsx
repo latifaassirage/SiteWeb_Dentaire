@@ -16,45 +16,19 @@ const monthlyData = [
 export default function Finance() {
   const navigate = useNavigate();
   const [invoices, setInvoices] = useState([]);
-  const [stats, setStats] = useState({ today: 0, month: 0 });
+  const [stats, setStats] = useState({ today: 0, month: 0, total: 0, unpaid: 0 });
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
   useEffect(() => {
-    fetchFinanceData();
-    
-    // Set up periodic refresh for real-time updates
-    const interval = setInterval(fetchFinanceData, 30000); // Refresh every 30 seconds
-    return () => clearInterval(interval);
+    api.get('/invoices').then(r => setInvoices(r.data)).catch(() => {});
+    api.get('/finance/stats').then(r => setStats(r.data)).catch(() => {});
   }, []);
-
-  const fetchFinanceData = async () => {
-    try {
-      // Fetch both invoices and payments for complete financial data
-      const [invoicesResponse, paymentsResponse, statsResponse] = await Promise.all([
-        api.get('/invoices').catch(() => ({ data: [] })), // Get invoices for Patient Documents
-        api.get('/payments').catch(() => ({ data: [] })), // Get payments from completed appointments
-        api.get('/payments/stats').catch(() => ({ data: { today: 0, month: 0, total_payments: 0, today_payments: 0 } }))
-      ]);
-      
-      // Combine invoices and payments for complete view
-      const allFinancialRecords = [
-        ...(invoicesResponse.data || []),
-        ...(paymentsResponse.data || [])
-      ];
-      
-      setInvoices(allFinancialRecords);
-      setStats(statsResponse.data || { today: 0, month: 0, total_payments: 0, today_payments: 0 });
-    } catch (error) {
-      console.error('Error fetching finance data:', error);
-      // Set safe defaults to prevent UI crashes
-      setInvoices([]);
-      setStats({ today: 0, month: 0, total_payments: 0, today_payments: 0 });
-    }
-  };
 
   const handlePay = async (id) => {
     await api.put(`/invoices/${id}/pay`);
-    fetchFinanceData(); // Refresh all finance data
+    // Refresh data
+    api.get('/invoices').then(r => setInvoices(r.data)).catch(() => {});
+    api.get('/finance/stats').then(r => setStats(r.data)).catch(() => {});
   };
 
   return (
@@ -64,27 +38,30 @@ export default function Finance() {
         <h1 className="text-2xl font-bold text-gray-700 mb-6">💰 Finance (Invoices & Payments)</h1>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-6 mb-6">
-          <div className="bg-white rounded-xl shadow p-5 border-t-4 border-green-500">
+        <div className="grid grid-cols-4 gap-6 mb-6">
+          <div className="bg-white rounded-xl shadow p-5">
             <p className="text-gray-500 text-sm">Today's Revenue</p>
             <p className="text-3xl font-bold text-gray-800 mt-1">
-              {(stats.today || 0).toLocaleString()} <span className="text-lg">MAD</span>
+              {stats.today?.toLocaleString() || 0} <span className="text-lg">MAD</span>
             </p>
-            <p className="text-green-500 text-sm mt-1">↑ Daily income</p>
           </div>
-          <div className="bg-white rounded-xl shadow p-5 border-t-4 border-blue-500">
+          <div className="bg-white rounded-xl shadow p-5">
             <p className="text-gray-500 text-sm">Monthly Revenue</p>
             <p className="text-3xl font-bold text-gray-800 mt-1">
-              {(stats.month || 0).toLocaleString()} <span className="text-lg">MAD</span>
+              {stats.month?.toLocaleString() || 0} <span className="text-lg">MAD</span>
             </p>
-            <p className="text-blue-500 text-sm mt-1">↑ This month</p>
           </div>
-          <div className="bg-white rounded-xl shadow p-5 border-t-4 border-orange-500">
-            <p className="text-gray-500 text-sm">Pending Payments</p>
-            <p className="text-3xl font-bold text-orange-500 mt-1">
-              {invoices.filter(i => i.status === 'pending').length}
+          <div className="bg-white rounded-xl shadow p-5">
+            <p className="text-gray-500 text-sm">Total Revenue</p>
+            <p className="text-3xl font-bold text-gray-800 mt-1">
+              {stats.total?.toLocaleString() || 0} <span className="text-lg">MAD</span>
             </p>
-            <p className="text-orange-400 text-sm mt-1">Awaiting payment</p>
+          </div>
+          <div className="bg-white rounded-xl shadow p-5">
+            <p className="text-gray-500 text-sm">Unpaid Invoices</p>
+            <p className="text-3xl font-bold text-red-500 mt-1">
+              {stats.unpaid || 0}
+            </p>
           </div>
         </div>
 
@@ -134,7 +111,10 @@ export default function Finance() {
               <h3 className="font-bold text-gray-800 text-lg">Toutes les Transactions</h3>
               <p className="text-sm text-gray-500 mt-1">Factures et paiements des patients</p>
             </div>
-            <button onClick={fetchFinanceData} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm">
+            <button onClick={() => {
+              api.get('/invoices').then(r => setInvoices(r.data)).catch(() => {});
+              api.get('/finance/stats').then(r => setStats(r.data)).catch(() => {});
+            }} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm">
               🔄 Actualiser
             </button>
           </div>
@@ -152,7 +132,7 @@ export default function Finance() {
             </thead>
             <tbody>
               {invoices.map((inv, index) => (
-                <tr key={inv.id} className="border-t hover:bg-gray-50 transition-colors">
+                <tr key={`invoice-${inv.id}-${index}`} className="border-t hover:bg-gray-50 transition-colors">
                   <td className="p-4 text-gray-600 font-medium border-r border-gray-100">{index + 1}</td>
                   <td className="p-4 border-r border-gray-100">
                     <div className="flex items-center gap-2">
