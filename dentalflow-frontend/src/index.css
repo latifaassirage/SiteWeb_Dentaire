@@ -1,0 +1,118 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global font size and readability improvements */
+@layer base {
+  html {
+    font-size: 18px; /* Increased from default 16px */
+  }
+  
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+      sans-serif;
+    font-size: 1rem; /* Base font size */
+    line-height: 1.6; /* Better line spacing */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    color: #1f2937; /* Darker text for better readability */
+  }
+
+  /* Improved heading sizes */
+  h1 {
+    @apply text-3xl font-bold text-gray-900;
+  }
+  
+  h2 {
+    @apply text-2xl font-bold text-gray-900;
+  }
+  
+  h3 {
+    @apply text-xl font-semibold text-gray-900;
+  }
+  
+  h4 {
+    @apply text-lg font-semibold text-gray-900;
+  }
+  
+  h5 {
+    @apply text-base font-semibold text-gray-900;
+  }
+  
+  h6 {
+    @apply text-sm font-semibold text-gray-900;
+  }
+
+  /* Improved paragraph and text elements */
+  p {
+    @apply text-base leading-relaxed text-gray-700;
+  }
+  
+  /* Improved button styles */
+  button {
+    @apply text-base font-medium py-2 px-4 rounded-lg transition-all duration-200;
+    @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
+  
+  /* Primary buttons */
+  .btn-primary {
+    @apply bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500;
+    @apply shadow-sm hover:shadow-md;
+  }
+  
+  /* Secondary buttons */
+  .btn-secondary {
+    @apply bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500;
+    @apply shadow-sm hover:shadow-md;
+  }
+  
+  /* Link improvements */
+  a {
+    @apply text-blue-600 hover:text-blue-700 font-medium;
+    @apply transition-colors duration-200;
+  }
+  
+  /* Navigation links */
+  .nav-link {
+    @apply text-base font-medium text-gray-600 hover:text-gray-900;
+    @apply transition-colors duration-200;
+  }
+  
+  /* Form inputs */
+  input, textarea, select {
+    @apply text-base py-2 px-3 border border-gray-300 rounded-lg;
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+  }
+  
+  /* Labels */
+  label {
+    @apply text-sm font-medium text-gray-700;
+  }
+  
+  /* Small text */
+  small {
+    @apply text-sm text-gray-600;
+  }
+  
+  /* Code blocks */
+  code {
+    font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+      monospace;
+    @apply text-sm bg-gray-100 px-1 py-0.5 rounded;
+  }
+}
+
+/* Utility classes for better typography */
+.text-readable {
+  @apply text-base leading-relaxed;
+}
+
+.text-large {
+  @apply text-lg leading-relaxed;
+}
+
+.text-small {
+  @apply text-sm leading-normal;
+}
