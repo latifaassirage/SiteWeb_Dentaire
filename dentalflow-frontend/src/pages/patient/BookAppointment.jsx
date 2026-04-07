@@ -44,6 +44,12 @@ export default function BookAppointment() {
     }).catch(() => {});
   }, []);
 
+  const handleLogout = () => {
+    localStorage.clear();
+    window.location.href = '/login';
+  };
+
+  // حساب وقت النهاية تلقائيا
   const calculateEndTime = (date, time, duration) => {
     const start = new Date(`${date}T${time}:00`);
     const end = new Date(start.getTime() + duration * 60000);

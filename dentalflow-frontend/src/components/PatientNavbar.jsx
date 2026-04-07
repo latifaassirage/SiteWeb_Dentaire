@@ -13,6 +13,9 @@ export default function PatientNavbar({ activePath }) {
   useEffect(() => {
     fetchNotifications();
     
+    // Set up periodic refresh for real-time updates
+    const interval = setInterval(fetchNotifications, 30000); // Refresh every 30 seconds
+    
     // Close dropdown when clicking outside
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -21,7 +24,11 @@ export default function PatientNavbar({ activePath }) {
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      clearInterval(interval);
+    };
   }, []);
 
   const fetchNotifications = async () => {
@@ -144,14 +151,17 @@ export default function PatientNavbar({ activePath }) {
                         <div className="p-4">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
-                              <p className="text-sm font-medium text-gray-900">{notification.message}</p>
-                              <p className="text-xs text-gray-500 mt-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-lg">{notification.icon || '??'}</span>
+                                <p className="text-sm font-medium text-gray-900">{notification.message}</p>
+                              </div>
+                              <p className="text-xs text-gray-500">
                                 {new Date(notification.created_at).toLocaleDateString('fr-FR', {
                                   weekday: 'long',
                                   year: 'numeric',
                                   month: 'long',
                                   day: 'numeric'
-                                })} • {new Date(notification.created_at).toLocaleTimeString('fr-FR', {
+                                })} ? {new Date(notification.created_at).toLocaleTimeString('fr-FR', {
                                   hour: '2-digit',
                                   minute: '2-digit'
                                 })}

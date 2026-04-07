@@ -3,37 +3,46 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Notifications\DatabaseNotification;
 
 class NotificationController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
         try {
-            $notifications = $request->user()->notifications()
+            $notifications = Notification::where('user_id', $request->user()->id)
                 ->orderBy('created_at', 'desc')
                 ->get()
                 ->map(function ($notification) {
-                    $data = $notification->data;
+                    // Add icons based on type
+                    $icon = match($notification->type) {
+                        'appointment' => '',
+                        'invoice' => '',
+                        'payment' => '',
+                        default => '',
+                    };
+                    
                     return [
                         'id' => $notification->id,
-                        'title' => $data['title'] ?? 'Notification',
-                        'message' => $data['message'] ?? $notification->data['message'] ?? 'Nouvelle notification',
-                        'type' => $data['type'] ?? 'general',
-                        'icon' => $data['icon'] ?? '🔔',
-                        'appointment_id' => $data['appointment_id'] ?? null,
-                        'patient_id' => $data['patient_id'] ?? null,
-                        'treatment_id' => $data['treatment_id'] ?? null,
+                        'title' => ucfirst($notification->type) . ' Notification',
+                        'message' => $notification->message,
+                        'type' => $notification->type,
+                        'icon' => $icon,
+                        'appointment_id' => null,
+                        'patient_id' => $notification->user_id,
+                        'treatment_id' => null,
                         'read_at' => $notification->read_at,
                         'created_at' => $notification->created_at,
                         'is_read' => !is_null($notification->read_at),
                     ];
                 });
 
-            $unreadCount = $request->user()->unreadNotifications()->count();
+            $unreadCount = Notification::where('user_id', $request->user()->id)
+                ->whereNull('read_at')
+                ->count();
 
             return response()->json($notifications);
         } catch (\Exception $e) {
@@ -50,8 +59,8 @@ class NotificationController extends Controller
     public function markAsRead(Request $request, $id): JsonResponse
     {
         try {
-            $notification = $request->user()->notifications()
-                ->where('id', $id)
+            $notification = Notification::where('id', $id)
+                ->where('user_id', $request->user()->id)
                 ->first();
 
             if (!$notification) {
@@ -75,7 +84,9 @@ class NotificationController extends Controller
     public function markAllAsRead(Request $request): JsonResponse
     {
         try {
-            $updated = $request->user()->unreadNotifications()->update(['read_at' => now()]);
+            $updated = Notification::where('user_id', $request->user()->id)
+                ->whereNull('read_at')
+                ->update(['read_at' => now()]);
 
             return response()->json(['message' => "All notifications marked as read ({$updated} updated)"]);
         } catch (\Exception $e) {

@@ -26,16 +26,16 @@ export default function AdminNavbar() {
 
   const fetchNotifications = async () => {
     try {
-      const response = await api.get('/notifications');
-      // Handle different response structures
-      const notificationsData = response.data?.notifications || response.data || [];
+      const response = await api.get('/admin/notifications');
+      // Handle admin notification response structure
+      const notificationsData = response.data?.notifications || [];
       setNotifications(Array.isArray(notificationsData) ? notificationsData : []);
       
-      // Count unread notifications
-      const unreadCount = notificationsData.filter(n => !n.read_at).length;
+      // Use unread count from API response
+      const unreadCount = response.data?.unread_count || 0;
       setUnreadCount(unreadCount);
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+      console.error('Error fetching admin notifications:', error);
       setNotifications([]);
       setUnreadCount(0);
     }
@@ -43,23 +43,23 @@ export default function AdminNavbar() {
 
   const markAsRead = async (notificationId) => {
     try {
-      await api.put(`/notifications/${notificationId}/read`);
+      await api.put(`/admin/notifications/${notificationId}/read`);
       setNotifications(prev => prev.map(n => 
-        n.id === notificationId ? { ...n, read_at: new Date().toISOString() } : n
+        n.id === notificationId ? { ...n, is_read: true, read_at: new Date().toISOString() } : n
       ));
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+      console.error('Error marking admin notification as read:', error);
     }
   };
 
   const markAllAsRead = async () => {
     try {
-      await api.put('/notifications/read-all');
-      setNotifications(prev => prev.map(n => ({ ...n, read_at: n.read_at || new Date().toISOString() })));
+      await api.put('/admin/notifications/read-all');
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true, read_at: n.read_at || new Date().toISOString() })));
       setUnreadCount(0);
     } catch (error) {
-      console.error('Error marking all notifications as read:', error);
+      console.error('Error marking all admin notifications as read:', error);
     }
   };
 
@@ -156,7 +156,7 @@ export default function AdminNavbar() {
                               </div>
                               
                               {/* Mark as Read Button */}
-                              {!notification.read_at && (
+                              {!notification.is_read && (
                                 <button
                                   onClick={() => markAsRead(notification.id)}
                                   className="ml-3 text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600"

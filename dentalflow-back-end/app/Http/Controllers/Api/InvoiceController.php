@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
+use App\Models\Payment;
 use Illuminate\Http\Request;
 
 class InvoiceController extends Controller
@@ -41,6 +42,7 @@ class InvoiceController extends Controller
             'appointment_id' => $request->appointment_id,
             'amount'         => $request->amount,
             'status'         => 'unpaid',
+            'issued_at'      => now(),
         ]);
 
         return response()->json($invoice->load(['patient', 'appointment']), 201);
@@ -51,7 +53,7 @@ class InvoiceController extends Controller
     {
         $invoice = Invoice::findOrFail($id);
         $invoice->update([
-            'status'  => 'payé',
+            'status'  => 'paid',
             'paid_at' => now(),
         ]);
         return response()->json(['message' => 'Payment recorded successfully']);
@@ -60,18 +62,19 @@ class InvoiceController extends Controller
     // Admin: إحصائيات مالية
     public function stats()
     {
-        $today = Invoice::where('status', 'payé')
-            ->whereDate('paid_at', today())
+        // Use payments table for actual revenue (money received)
+        $today = Payment::where('status', 'paid')
+            ->whereDate('payment_date', today())
             ->sum('amount');
 
-        $month = Invoice::where('status', 'payé')
-            ->whereMonth('paid_at', now()->month)
-            ->whereYear('paid_at', now()->year)
+        $month = Payment::where('status', 'paid')
+            ->whereMonth('payment_date', now()->month)
+            ->whereYear('payment_date', now()->year)
             ->sum('amount');
 
-        $total = Invoice::where('status', 'payé')->sum('amount');
+        $total = Payment::where('status', 'paid')->sum('amount');
 
-        $unpaid = Invoice::where('status', 'non_payé')->count();
+        $unpaid = Invoice::where('status', 'unpaid')->count();
 
         return response()->json([
             'today'  => $today,

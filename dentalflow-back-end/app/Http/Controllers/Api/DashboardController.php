@@ -47,11 +47,8 @@ class DashboardController extends Controller
                 'total_patients' => User::where('role', 'patient')->count() ?? 0,
             ];
             
-            // Calculate revenue from both invoices and payments
-            $invoiceRevenue = Invoice::where('status', 'paid')->sum('amount') ?? 0;
-            $paymentRevenue = Payment::where('status', 'paid')->sum('amount') ?? 0;
-            
-            $stats['total_revenue'] = $invoiceRevenue + $paymentRevenue;
+            // Calculate revenue from payments only (actual money received)
+            $stats['total_revenue'] = Payment::where('status', 'paid')->sum('amount') ?? 0;
             $stats['paid_invoices'] = Invoice::where('status', 'paid')->count() ?? 0;
             
             // Get recent appointments with safe mapping
@@ -104,16 +101,7 @@ class DashboardController extends Controller
             $allMonths = ['January', 'February', 'March', 'April', 'May', 'June', 
                           'July', 'August', 'September', 'October', 'November', 'December'];
             
-            // Get invoice revenue by month
-            $invoiceMonthlyRevenue = Invoice::where('status', 'paid')
-                ->whereYear('created_at', now()->year)
-                ->selectRaw('MONTHNAME(created_at) as month, SUM(amount) as revenue')
-                ->groupBy(DB::raw('MONTHNAME(created_at)'))
-                ->orderBy(DB::raw('MONTH(created_at)'))
-                ->get()
-                ->keyBy('month');
-            
-            // Get payment revenue by month
+            // Get payment revenue by month only (actual money received)
             $paymentMonthlyRevenue = Payment::where('status', 'paid')
                 ->whereYear('payment_date', now()->year)
                 ->selectRaw('MONTHNAME(payment_date) as month, SUM(amount) as revenue')
@@ -122,14 +110,13 @@ class DashboardController extends Controller
                 ->get()
                 ->keyBy('month');
             
-            // Combine monthly revenues
-            return collect($allMonths)->map(function ($month) use ($invoiceMonthlyRevenue, $paymentMonthlyRevenue) {
-                $invoiceRevenue = $invoiceMonthlyRevenue->get($month, (object) ['revenue' => 0])->revenue;
+            // Return monthly revenue from payments only
+            return collect($allMonths)->map(function ($month) use ($paymentMonthlyRevenue) {
                 $paymentRevenue = $paymentMonthlyRevenue->get($month, (object) ['revenue' => 0])->revenue;
                 
                 return [
                     'month' => substr($month, 0, 3),
-                    'revenue' => (float) ($invoiceRevenue + $paymentRevenue),
+                    'revenue' => (float) $paymentRevenue,
                 ];
             })->toArray();
         } catch (\Exception $e) {

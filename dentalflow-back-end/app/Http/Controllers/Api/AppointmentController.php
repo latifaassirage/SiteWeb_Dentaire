@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AdminNotification;
 use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\Notification;
@@ -110,9 +111,23 @@ class AppointmentController extends Controller
             'status'       => 'en_attente', // Default status
         ]);
 
+        // Create admin notification for new appointment
+        $treatment = Treatment::find($request->treatment_id);
+        AdminNotification::createNotification(
+            "New appointment booked by {$request->user()->name}",
+            'new_appointment',
+            [
+                'appointment_id' => $appointment->id,
+                'patient_id' => $request->user()->id,
+                'patient_name' => $request->user()->name,
+                'treatment_id' => $request->treatment_id,
+                'treatment_name' => $treatment?->name,
+                'start_time' => $appointment->start_time->format('Y-m-d H:i:s'),
+            ]
+        );
+
         // Send notification to all admin users
         $admins = User::where('role', 'admin')->get();
-        $treatment = Treatment::find($request->treatment_id);
         
         // Debug: Log the admin users we found
         \Log::info('Found admin users for notification:', ['count' => $admins->count()]);
@@ -322,7 +337,7 @@ class AppointmentController extends Controller
                         'appointment_id' => $appointment->id,
                         'patient_id'     => $appointment->patient_id,
                         'amount'         => $treatmentPrice,
-                        'status'         => 'paid', // Auto-mark as paid since treatment is completed
+                        'status'         => 'unpaid', // Create as unpaid, admin can mark as paid later
                         'issued_at'      => now(),
                     ]);
                     

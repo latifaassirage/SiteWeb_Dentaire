@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\DoctorController;
 use App\Http\Controllers\Api\TreatmentController;
+use App\Http\Controllers\Api\AdminNotificationController;
 
 // Public routes
 Route::post('/register', [AuthController::class, 'register']);
@@ -27,10 +28,6 @@ Route::get('/clinic-info', function () {
 
 Route::get('/services', function () {
     return response()->json(\App\Models\Service::all());
-});
-
-Route::get('/notifications', function () {
-    return response()->json([]);
 });
 
 // Protected routes
@@ -78,6 +75,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // Payment routes
     Route::get('/payments',                  [PaymentController::class, 'index']);
     Route::get('/payments/stats',             [PaymentController::class, 'stats']);
+
+    // Admin notification routes
+    Route::get('/admin/notifications',       [AdminNotificationController::class, 'index']);
+    Route::put('/admin/notifications/{id}/read', [AdminNotificationController::class, 'markAsRead']);
+    Route::put('/admin/notifications/read-all', [AdminNotificationController::class, 'markAllAsRead']);
+    Route::get('/admin/notifications/unread-count', [AdminNotificationController::class, 'unreadCount']);
 
     Route::post('/treatments',               [TreatmentController::class, 'store']);
     Route::put('/treatments/{id}',           [TreatmentController::class, 'update']);
