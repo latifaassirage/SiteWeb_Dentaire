@@ -35,7 +35,13 @@ export default function Agenda() {
   const weekDays = getWeekDays(new Date(currentDate));
 
   useEffect(() => {
-    api.get('/appointments').then(r => setAppointments(r.data)).catch(() => {});
+    api.get('/appointments')
+        .then(r => {
+            console.log('All appointments:', r.data);
+            console.log('Confirmé only:', r.data.filter(a => a.status === 'confirmé'));
+            setAppointments(r.data);
+        })
+        .catch(err => console.error('Error:', err));
   }, []);
 
   const handleLogout = () => {
@@ -77,54 +83,45 @@ export default function Agenda() {
 
   const handleAbsent = async (e, id) => {
     e.stopPropagation();
-    if (!window.confirm('Marquer ce rendez-vous comme absent?')) return;
     try {
-      await api.put(`/appointments/${id}`, {
-        status: 'absent',
-        note: "Patient marqué comme absent par l'administration."
-      });
-      setAppointments(prev => prev.map(a => a.id === id ? {...a, status: 'absent'} : a));
-      alert('Rendez-vous marqué comme absent avec succès!');
-    } catch (error) {
-      console.error('Error:', error);
-      alert('Erreur lors de la mise à jour du rendez-vous: ' + (error.response?.data?.message || error.message));
+      await api.put(`/appointments/${id}`, { status: 'absent' });
+      setAppointments(prev => prev.filter(a => a.id !== id));
+    } catch (err) {
+      console.error(err);
     }
   };
 
   const handleTermine = async (e, id) => {
     e.stopPropagation();
     try {
-      // Get appointment details to create payment record
+      await api.put(`/appointments/${id}`, { status: 'terminé' });
       const appointment = appointments.find(a => a.id === id);
-      if (!appointment) {
-        alert('Erreur: Rendez-vous non trouvé');
-        return;
+      if (appointment?.patient && appointment?.treatment) {
+        await api.post('/invoices', {
+          patient_id: appointment.patient.id,
+          appointment_id: appointment.id,
+          amount: appointment.treatment.price,
+          status: 'en_attente_paiement',
+        });
       }
-
-      // Update appointment status to completed - backend will handle payment creation
-      const response = await api.put(`/appointments/${id}/status`, { status: 'completed' });
-      
-      // Update local state with response data
-      setAppointments(prev => prev.map(a => a.id === id ? {...a, status: response.data.status || 'terminé'} : a));
-      
-      // Refresh appointments data to get latest state
-      const appointmentsResponse = await api.get('/appointments');
-      setAppointments(appointmentsResponse.data);
-      
-      // Show success message
-      alert('Rendez-vous terminé et paiement enregistré avec succès!');
-    } catch (error) {
-      console.error('Error:', error);
-      alert('Erreur lors de la mise à jour du rendez-vous: ' + (error.response?.data?.message || error.message));
+      setAppointments(prev => prev.filter(a => a.id !== id));
+    } catch (err) {
+      console.error(err);
     }
   };
 
   const getAppointmentsForDayAndHour = (day, hour) => {
     return appointments.filter(a => {
+      if (a.status !== 'confirmé' && a.status !== 'confirme') return false;
       const start = new Date(a.start_time);
+      const dayMatch = start.toDateString() === day.toDateString();
+      const hourMatch = start.getHours() === hour;
+      
+      console.log('Checking:', a.patient?.name, start.toDateString(), day.toDateString(), dayMatch, hourMatch);
+      
       return (
-        start.toDateString() === day.toDateString() &&
-        start.getHours() === hour &&
+        dayMatch &&
+        hourMatch &&
         (search === '' || a.patient?.name?.toLowerCase().includes(search.toLowerCase()))
       );
     });
@@ -232,20 +229,6 @@ export default function Agenda() {
                             )}
                           </div>
                           <div className="flex gap-1 flex-wrap">
-                            {/* State: en_attente - Show Confirmer and Annuler */}
-                            {a.status === 'en_attente' && (
-                              <>
-                                <button onClick={e => handleConfirm(e, a.id)}
-                                  className="bg-white/90 text-green-600 px-2 py-1 rounded text-xs font-bold hover:bg-white transition-colors shadow-sm">
-                                  ✓ Confirmer
-                                </button>
-                                <button onClick={e => handleAnnuler(e, a.id)}
-                                  className="bg-white/90 text-red-600 px-2 py-1 rounded text-xs font-bold hover:bg-white transition-colors shadow-sm">
-                                  ✕ Annuler
-                                </button>
-                              </>
-                            )}
-                            
                             {/* State: confirmé - Show Terminé and Absent */}
                             {a.status === 'confirmé' && (
                               <>
@@ -255,23 +238,9 @@ export default function Agenda() {
                                 </button>
                                 <button onClick={e => handleAbsent(e, a.id)}
                                   className="bg-white/90 text-orange-600 px-2 py-1 rounded text-xs font-bold hover:bg-white transition-colors shadow-sm">
-                                    🔕 Absent
+                                    � Absent
                                 </button>
                               </>
-                            )}
-                            
-                            {/* State: terminé - No action buttons (completed) */}
-                            {a.status === 'terminé' && (
-                              <div className="bg-white/90 text-gray-500 px-2 py-1 rounded text-xs font-bold">
-                                ✅ Complété
-                              </div>
-                            )}
-                            
-                            {/* State: annulé - No action buttons (cancelled) */}
-                            {a.status === 'annulé' && (
-                              <div className="bg-white/90 text-gray-500 px-2 py-1 rounded text-xs font-bold">
-                                ❌ Annulé
-                              </div>
                             )}
                           </div>
                         </div>
