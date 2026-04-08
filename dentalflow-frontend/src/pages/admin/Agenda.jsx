@@ -97,12 +97,21 @@ export default function Agenda() {
       await api.put(`/appointments/${id}`, { status: 'terminé' });
       const appointment = appointments.find(a => a.id === id);
       if (appointment?.patient && appointment?.treatment) {
-        await api.post('/invoices', {
-          patient_id: appointment.patient.id,
-          appointment_id: appointment.id,
-          amount: appointment.treatment.price,
-          status: 'en_attente_paiement',
-        });
+        // Check if invoice already exists for this appointment
+        const existing = await api.get(`/invoices?appointment_id=${id}`);
+        if (!existing.data || existing.data.length === 0) {
+          const invoiceData = {
+            patient_id: Number(appointment.patient.id),
+            appointment_id: Number(appointment.id),
+            amount: Number(appointment.treatment.price),
+            status: 'unpaid'
+          };
+          console.log('Creating invoice:', invoiceData);
+          const response = await api.post('/invoices', invoiceData);
+          console.log('Invoice created:', response.data);
+        } else {
+          console.log('Invoice already exists for appointment:', id);
+        }
       }
       setAppointments(prev => prev.filter(a => a.id !== id));
     } catch (err) {

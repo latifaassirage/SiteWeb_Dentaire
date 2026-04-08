@@ -87,18 +87,18 @@ export default function Finance() {
               <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
                 <span className="text-gray-600 text-sm">Total Paid</span>
                 <span className="font-bold text-green-600">
-                  {invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (parseFloat(i.amount) || 0), 0).toLocaleString()} MAD
+                  {stats.total?.toLocaleString() || 0} MAD
                 </span>
               </div>
               <div className="flex justify-between items-center p-3 bg-orange-50 rounded-lg">
                 <span className="text-gray-600 text-sm">Total Pending</span>
                 <span className="font-bold text-orange-600">
-                  {invoices.filter(i => i.status === 'pending').reduce((s, i) => s + (parseFloat(i.amount) || 0), 0).toLocaleString()} MAD
+                  {stats.total_pending?.toLocaleString() || 0} MAD
                 </span>
               </div>
               <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
                 <span className="text-gray-600 text-sm">Total Transactions</span>
-                <span className="font-bold text-blue-600">{invoices.length}</span>
+                <span className="font-bold text-blue-600">{stats.total_transactions || 0}</span>
               </div>
             </div>
           </div>
@@ -191,19 +191,19 @@ export default function Finance() {
                   </td>
                   <td className="p-4 border-r border-gray-100">
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      inv.status === 'paid' || inv.status === 'payé' ? 'bg-green-100 text-green-700 border border-green-200' : 
-                      inv.status === 'pending' || inv.status === 'unpaid' || inv.status === 'non_payé' ? 'bg-orange-100 text-orange-700 border border-orange-200' :
+                      inv.status === 'paid' ? 'bg-green-100 text-green-700 border border-green-200' : 
+                      inv.status === 'unpaid' ? 'bg-orange-100 text-orange-700 border border-orange-200' :
                       inv.status === 'refunded' ? 'bg-red-100 text-red-700 border border-red-200' :
                       'bg-gray-100 text-gray-700 border border-gray-200'
                     }`}>
-                      {inv.status === 'paid' || inv.status === 'payé' ? '✅ Payé' : 
-                       inv.status === 'pending' || inv.status === 'unpaid' || inv.status === 'non_payé' ? '⏳ En attente' :
+                      {inv.status === 'paid' ? '✅ Payé' : 
+                       inv.status === 'unpaid' ? '⏳ En attente' :
                        inv.status === 'refunded' ? '❌ Remboursé' :
                        inv.status}
                     </span>
                   </td>
                   <td className="p-4">
-                    {(inv.status === 'pending' || inv.status === 'unpaid' || inv.status === 'non_payé') && (
+                    {(inv.status === 'unpaid') && (
                       <button onClick={() => handlePay(inv.id)}
                         className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-green-700 transition-colors shadow-sm">
                         Marquer comme payé
