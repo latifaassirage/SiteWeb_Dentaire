@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../../api/axios';
 import AdminNavbar from '../../components/AdminNavbar.jsx';
 
@@ -17,7 +17,10 @@ const revenueData = [
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [appointments, setAppointments] = useState([]);
-  const [stats, setStats] = useState(null);
+  const [stats, setStats] = useState({ today: 0, month: 0, total: 0, unpaid: 0 });
+  const [financeStats, setFinanceStats] = useState({ total: 0, unpaid: 0 });
+  const [patientCount, setPatientCount] = useState(0);
+  const [monthlyData, setMonthlyData] = useState([]);
   const [loading, setLoading] = useState(true);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -31,41 +34,26 @@ export default function AdminDashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      // Fetch dashboard statistics and appointments in parallel
-      const [dashboardResponse, appointmentsResponse] = await Promise.all([
-        api.get('/dashboard'),
-        api.get('/appointments')
+      // Fetch all data in parallel
+      const [appointmentsResponse, financeResponse, patientsResponse, monthlyResponse] = await Promise.all([
+        api.get('/appointments'),
+        api.get('/finance/stats'),
+        api.get('/patients'),
+        api.get('/finance/monthly')
       ]);
       
-      console.log('📊 Dashboard stats response:', dashboardResponse.data);
-      console.log('🔍 Pending count:', dashboardResponse.data?.pending);
-      console.log('🔍 Today appointments:', dashboardResponse.data?.appointments_today);
-      setStats(dashboardResponse.data || {
-        appointments_today: 0,
-        pending: 0,
-        confirmed: 0,
-        completed: 0,
-        total_patients: 0,
-        total_revenue: 0,
-        paid_invoices: 0,
-        recent_appointments: [],
-        monthly_revenue: []
-      });
+      console.log('📊 Finance stats response:', financeResponse.data);
+      console.log('� Patients count:', patientsResponse.data?.length);
+      
+      setFinanceStats(financeResponse.data || { total: 0, unpaid: 0 });
+      setPatientCount(patientsResponse.data?.length || 0);
+      setMonthlyData(monthlyResponse.data || []);
       setAppointments(appointmentsResponse.data || []);
     } catch (err) {
       console.error('❌ Failed to fetch dashboard data:', err);
-      // Set safe defaults to prevent page crashes
-      setStats({
-        appointments_today: 0,
-        pending: 0,
-        confirmed: 0,
-        completed: 0,
-        total_patients: 0,
-        total_revenue: 0,
-        paid_invoices: 0,
-        recent_appointments: [],
-        monthly_revenue: []
-      });
+      // Set safe defaults
+      setFinanceStats({ total: 0, unpaid: 0 });
+      setPatientCount(0);
       setAppointments([]);
     } finally {
       setLoading(false);
@@ -128,16 +116,16 @@ export default function AdminDashboard() {
                 <div className="bg-white rounded-xl shadow p-5">
                   <p className="text-gray-500 text-sm font-medium">Finances</p>
                   <p className="text-gray-400 text-xs mb-2">Revenue Total</p>
-                  <p className="text-3xl font-bold text-gray-800">{(stats?.total_revenue || 0).toLocaleString()} <span className="text-lg">MAD</span></p>
+                  <p className="text-3xl font-bold text-gray-800">{(financeStats?.total || 0).toLocaleString()} <span className="text-lg">MAD</span></p>
                   <p className="text-green-500 text-sm mt-1">💰 Revenus générés</p>
-                  <p className="text-gray-400 text-sm mt-3">{stats?.total_patients || 0} patients total</p>
+                  <p className="text-gray-400 text-sm mt-3">{patientCount} patients total</p>
                 </div>
 
                 {/* Total Patients */}
                 <div className="bg-white rounded-xl shadow p-5">
                   <p className="text-gray-500 text-sm font-medium">Patients</p>
                   <p className="text-gray-400 text-xs mb-2">Total Patients</p>
-                  <p className="text-3xl font-bold text-gray-800">{stats?.total_patients || 0}</p>
+                  <p className="text-3xl font-bold text-gray-800">{patientCount}</p>
                   <p className="text-green-500 text-sm mt-1">👥 Patients inscrits</p>
                   <p className="text-gray-400 text-sm mt-3">{stats?.pending || 0} en attente</p>
                 </div>
@@ -158,13 +146,13 @@ export default function AdminDashboard() {
           <div className="bg-white rounded-xl shadow p-5">
             <h3 className="font-bold text-gray-700 mb-4">Revenue Mensuel</h3>
             <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={stats?.monthly_revenue || revenueData}>
+              <BarChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip formatter={(value) => `${value.toLocaleString()} MAD`} />
-                <Line type="monotone" dataKey="revenue" stroke="#1a2b4a" strokeWidth={2} dot={false} />
-              </LineChart>
+                <Bar dataKey="amount" fill="#1a2b4a" radius={[4,4,0,0]} />
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>

@@ -1,42 +1,47 @@
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import api from '../api/axios';
+import axios from 'axios';
 
 export default function Landing() {
   const navigate = useNavigate();
-  const [clinicSettings, setClinicSettings] = useState({
+  const [clinicInfo, setClinicInfo] = useState({
     clinic_name: 'DentalFlow',
-    email: '[Your Admin Gmail]',
-    phone: '+212 6 XX XX XX XX',
-    address: 'N° 45, Avenue Mohammed V, Guelmim, Maroc',
-    working_hours: {
-      monday_friday: '09:00 - 18:30',
-      saturday: '09:00 - 14:00',
-      sunday: 'Fermé'
-    }
+    phone: '+212 600-000-000',
+    email: 'contact@dentalflow.ma',
+    address: 'GUELMIM, Maroc',
+    // Detailed working hours
+    monday_open: '09:00',
+    monday_close: '19:00',
+    monday_closed: '0',
+    tuesday_open: '09:00',
+    tuesday_close: '19:00',
+    tuesday_closed: '0',
+    wednesday_open: '09:00',
+    wednesday_close: '19:00',
+    wednesday_closed: '0',
+    thursday_open: '09:00',
+    thursday_close: '19:00',
+    thursday_closed: '0',
+    friday_open: '09:00',
+    friday_close: '19:00',
+    friday_closed: '0',
+    saturday_open: '09:00',
+    saturday_close: '13:00',
+    saturday_closed: '0',
+    sunday_closed: '1',
+    lunch_start: '12:00',
+    lunch_end: '14:00',
   });
+  const [services, setServices] = useState([]);
 
   useEffect(() => {
-    fetchClinicSettings();
+    axios.get('http://127.0.0.1:8000/api/settings')
+        .then(r => setClinicInfo(r.data))
+        .catch(() => {});
+    axios.get('http://127.0.0.1:8000/api/services')
+        .then(r => setServices(r.data))
+        .catch(() => {});
   }, []);
-
-  const fetchClinicSettings = async () => {
-    try {
-      const response = await api.get('/clinic-settings');
-      setClinicSettings(response.data);
-    } catch (err) {
-      console.log('Using fallback clinic settings:', err);
-      // Fallback to admin profile if API fails
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      if (user.email) {
-        setClinicSettings(prev => ({
-          ...prev,
-          email: user.email,
-          phone: user.phone || prev.phone
-        }));
-      }
-    }
-  };
 
   return (
     <div className="min-h-screen bg-white">
@@ -70,7 +75,7 @@ export default function Landing() {
       <div className="px-12 py-16 max-w-6xl mx-auto flex items-center justify-between">
         <div className="max-w-xl">
           <div className="inline-flex items-center gap-2 bg-teal-50 text-teal-600 px-4 py-2 rounded-full text-sm font-medium mb-6">
-            🏥 Cabinet Dentaire Moderne à Agadir
+            🏥 Cabinet Dentaire Moderne à Guelmim
           </div>
           <h1 className="text-5xl font-bold text-gray-900 leading-tight mb-4">
             Un sourire sain <br />commence <span style={{ color: '#0d9488' }}>ici.</span>
@@ -133,26 +138,19 @@ export default function Landing() {
         <h2 className="text-3xl font-bold text-center text-gray-800 mb-2">Nos Services</h2>
         <p className="text-center text-gray-400 mb-10">Des soins dentaires complets pour toute la famille</p>
         <div className="grid grid-cols-3 gap-6">
-          {[
-            { icon: '🦷', title: 'Obturation / Plombage', desc: 'Soins conservateurs / Réparation du tissu dentaire' },
-            { icon: '🧹', title: 'Détartrage / Nettoyage profond', desc: 'Hygiène dentaire / Prévention' },
-            { icon: '⚕️', title: 'Traitement de canal / Dévitalisation', desc: 'Endodontie / Traitement de l\'infection dentaire' },
-            { icon: '👑', title: 'Couronne dentaire', desc: 'Prothèse fixe / Protection et restauration du dent' },
-            { icon: '🦴', title: 'Extraction dentaire / Arrachage', desc: 'Chirurgie dentaire / Retrait de dent' },
-            { icon: '😁', title: 'Orthodontie / Appareils dentaires', desc: 'Correction de l\'alignement des dents et de la mâchoire' },
-            { icon: '�', title: 'Implants dentaires', desc: 'Prothèse implantaire / Remplacement de dent manquante' },
-            { icon: '⚡', title: 'Chirurgie buccale', desc: 'Interventions chirurgicales sur dents, gencives ou mâchoire' },
-            { icon: '🌿', title: 'Parodontologie / Traitement des gencives', desc: 'Soins des tissus parodontaux / Traitement des gencives' },
-            { icon: '✨', title: 'Blanchiment des dents', desc: 'Esthétique dentaire / Amélioration de la couleur des dents' },
-          ].map((s, i) => (
-            <div key={i}
+          {services.length > 0 ? services.map((service, i) => (
+            <div key={service.id || i}
               className="bg-white rounded-xl shadow p-6 hover:shadow-lg transition border-t-4"
               style={{ borderColor: '#0d9488' }}>
-              <div className="text-4xl mb-3">{s.icon}</div>
-              <h3 className="font-bold text-gray-800 text-lg mb-2">{s.title}</h3>
-              <p className="text-gray-500 text-sm">{s.desc}</p>
+              <div className="text-4xl mb-3">{service.icon_name || '🦷'}</div>
+              <h3 className="font-bold text-gray-800 text-lg mb-2">{service.name || service.title}</h3>
+              <p className="text-gray-500 text-sm">{service.description}</p>
             </div>
-          ))}
+          )) : (
+            <div className="col-span-3 text-center py-8 text-gray-500">
+              No services available
+            </div>
+          )}
         </div>
       </div>
 
@@ -174,36 +172,51 @@ export default function Landing() {
           <div className="bg-white rounded-xl shadow p-5">
             <div className="text-3xl mb-2">📍</div>
             <p className="font-bold text-gray-700">Adresse</p>
-            <p className="text-gray-500 text-sm mt-1">{clinicSettings.address}</p>
+            <p className="text-gray-500 text-sm mt-1">{clinicInfo.address}</p>
           </div>
           <div className="bg-white rounded-xl shadow p-5">
             <div className="text-3xl mb-2">📞</div>
             <p className="font-bold text-gray-700">Téléphone</p>
-            <p className="text-gray-500 text-sm mt-1">{clinicSettings.phone}</p>
+            <p className="text-gray-500 text-sm mt-1">{clinicInfo.phone}</p>
           </div>
           <div className="bg-white rounded-xl shadow p-5">
             <div className="text-3xl mb-2">📧</div>
             <p className="font-bold text-gray-700">Email</p>
-            <p className="text-gray-500 text-sm mt-1">{clinicSettings.email}</p>
+            <p className="text-gray-500 text-sm mt-1">{clinicInfo.email}</p>
           </div>
         </div>
         
         <div className="bg-white rounded-xl shadow p-6 mt-6 max-w-2xl mx-auto">
           <div className="text-3xl mb-3">🕐</div>
           <p className="font-bold text-gray-700 mb-3">Horaires d'Ouverture</p>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Lundi - Vendredi:</span>
-              <span className="font-bold text-gray-800">{clinicSettings.working_hours?.monday_friday}</span>
+          <div className="space-y-3">
+            <div className="flex justify-between text-sm border-b pb-2">
+              <span className="text-gray-600 font-medium">Lundi - Vendredi:</span>
+              <span className="font-bold text-gray-800">
+                {clinicInfo.monday_closed === '1' ? 'Fermé' : `${clinicInfo.monday_open} - ${clinicInfo.monday_close}`}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm border-b pb-2">
+              <span className="text-gray-600 font-medium">Samedi:</span>
+              <span className="font-bold text-gray-800">
+                {clinicInfo.saturday_closed === '1' ? 'Fermé' : `${clinicInfo.saturday_open} - ${clinicInfo.saturday_close}`}
+              </span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Samedi:</span>
-              <span className="font-bold text-gray-800">{clinicSettings.working_hours?.saturday}</span>
+              <span className="text-gray-600 font-medium">Dimanche:</span>
+              <span className="font-bold text-red-600">
+                {clinicInfo.sunday_closed === '1' ? 'Fermé' : `${clinicInfo.sunday_open || '09:00'} - ${clinicInfo.sunday_close || '19:00'}`}
+              </span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Dimanche:</span>
-              <span className="font-bold text-red-600">{clinicSettings.working_hours?.sunday}</span>
-            </div>
+            {clinicInfo.lunch_start && clinicInfo.lunch_end && (
+              <div className="mt-4 p-3 bg-yellow-50 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  <span className="font-medium">⚠️ Pause Déjeuner:</span> {clinicInfo.lunch_start} - {clinicInfo.lunch_end}
+                  <br />
+                  <span className="text-xs">Les rendez-vous ne sont pas disponibles pendant cette période</span>
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -212,13 +225,13 @@ export default function Landing() {
       <footer className="bg-gray-800 text-gray-400 py-8 text-center">
         <div className="flex justify-center items-center gap-2 mb-3">
           <span className="text-xl">🦷</span>
-          <span className="text-white font-bold text-lg">{clinicSettings.clinic_name}</span>
+          <span className="text-white font-bold text-lg">{clinicInfo.clinic_name}</span>
         </div>
         <div className="flex justify-center gap-6 mb-3">
-          <span className="text-sm">📞 {clinicSettings.phone}</span>
-          <span className="text-sm">📧 {clinicSettings.email}</span>
+          <span className="text-sm">📞 {clinicInfo.phone}</span>
+          <span className="text-sm">📧 {clinicInfo.email}</span>
         </div>
-        <p className="text-sm">© 2026 {clinicSettings.clinic_name}. {clinicSettings.address}. Tous droits réservés.</p>
+        <p className="text-sm">© 2026 {clinicInfo.clinic_name}. {clinicInfo.address}. Tous droits réservés.</p>
       </footer>
     </div>
   );

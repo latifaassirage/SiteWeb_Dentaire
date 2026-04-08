@@ -7,31 +7,46 @@ export default function Settings() {
   const navigate = useNavigate();
   
   // Basic Info State
-  const [clinicInfo, setClinicInfo] = useState({
+  const [basicInfo, setBasicInfo] = useState({
     clinic_name: '',
-    email: '',
     phone: '',
+    email: '',
     address: '',
   });
 
-  // Working Hours State
+  // Working Hours State - Detailed Daily Schedules
   const [workingHours, setWorkingHours] = useState({
-    monday_friday: ['', ''],
-    saturday: '',
-    sunday: '',
+    monday_open: '',
+    monday_close: '',
+    monday_closed: '0',
+    tuesday_open: '',
+    tuesday_close: '',
+    tuesday_closed: '0',
+    wednesday_open: '',
+    wednesday_close: '',
+    wednesday_closed: '0',
+    thursday_open: '',
+    thursday_close: '',
+    thursday_closed: '0',
+    friday_open: '',
+    friday_close: '',
+    friday_closed: '0',
+    saturday_open: '',
+    saturday_close: '',
+    saturday_closed: '0',
+    sunday_closed: '1',
+    lunch_start: '',
+    lunch_end: '',
   });
 
   // Services State
-  const [services, setServices] = useState([
-    { id: 1, title: 'Consultation Générale', description: 'Examen dentaire complet et diagnostic', icon_name: '🦷' },
-    { id: 2, title: 'Blanchiment Dentaire', description: 'Techniques modernes pour un sourire éclatant', icon_name: '✨' },
-    { id: 3, title: 'Orthodontie', description: 'Correction de l\'alignement dentaire', icon_name: '🦷' },
-    { id: 4, title: 'Implants Dentaires', description: 'Solutions permanentes pour dents manquantes', icon_name: '🔧' },
-  ]);
+  const [services, setServices] = useState([]);
   const [newService, setNewService] = useState({
-    title: '',
+    name: '',
     description: '',
-    icon_name: '🦷',
+    icon_name: '??',
+    sort_order: 0,
+    is_active: true
   });
 
   // Treatments State
@@ -51,103 +66,99 @@ export default function Settings() {
   const [activeTab, setActiveTab] = useState('basic');
 
   useEffect(() => {
-    fetchAllSettings();
+    fetchSettings();
+    fetchServices();
+    fetchTreatments();
   }, []);
 
-  const fetchAllSettings = async () => {
+  const fetchSettings = async () => {
     try {
       setLoading(true);
-      setError('');
-      
-      // Check if user is authenticated
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setError('Please login to access settings');
-        return;
-      }
-      
-      // Fetch clinic info (public endpoint)
-      const response = await api.get('/clinic-info');
-      
-      if (response.data) {
-        setClinicInfo(response.data);
-      }
-      
-      // Set default data for services and treatments (no API calls)
-      setServices([
-        { id: 1, title: 'Consultation et Diagnostic', description: 'Examen dentaire complet', icon_name: '🦷' },
-        { id: 2, title: 'Hygiène Dentaire', description: 'Nettoyage professionnel', icon_name: '✨' },
-        { id: 3, title: 'Blanchiment Dentaire', description: 'Sourire éclatant', icon_name: '🌟' },
-        { id: 4, title: 'Orthodontie', description: 'Correction de l\'alignement dentaire', icon_name: '🦷' },
-      ]);
-      
-      setTreatments([
-        { id: 1, name: 'Consultation', price: 200, category: 'general', description: 'Consultation générale' },
-        { id: 2, name: 'Détartrage', price: 300, category: 'preventive', description: 'Nettoyage professionnel' },
-        { id: 3, name: 'Obturation', price: 400, category: 'conservateur', description: 'Traitement des caries' },
-        { id: 4, name: 'Couronne', price: 800, category: 'prothese', description: 'Protection dentaire' },
-      ]);
-      
+      const response = await api.get('/settings');
+      setBasicInfo(response.data);
+      setWorkingHours({
+        monday_open: response.data.monday_open,
+        monday_close: response.data.monday_close,
+        monday_closed: response.data.monday_closed,
+        tuesday_open: response.data.tuesday_open,
+        tuesday_close: response.data.tuesday_close,
+        tuesday_closed: response.data.tuesday_closed,
+        wednesday_open: response.data.wednesday_open,
+        wednesday_close: response.data.wednesday_close,
+        wednesday_closed: response.data.wednesday_closed,
+        thursday_open: response.data.thursday_open,
+        thursday_close: response.data.thursday_close,
+        thursday_closed: response.data.thursday_closed,
+        friday_open: response.data.friday_open,
+        friday_close: response.data.friday_close,
+        friday_closed: response.data.friday_closed,
+        saturday_open: response.data.saturday_open,
+        saturday_close: response.data.saturday_close,
+        saturday_closed: response.data.saturday_closed,
+        sunday_closed: response.data.sunday_closed,
+        lunch_start: response.data.lunch_start,
+        lunch_end: response.data.lunch_end,
+      });
     } catch (err) {
       console.error('Error fetching settings:', err);
-      setError('Failed to load settings. Please try refreshing the page.');
+      setError('Failed to load settings');
     } finally {
       setLoading(false);
     }
   };
 
-  const saveClinicInfo = async () => {
+  const fetchServices = async () => {
+    try {
+      const response = await api.get('/services');
+      setServices(response.data);
+    } catch (err) {
+      console.error('Error fetching services:', err);
+    }
+  };
+
+  const fetchTreatments = async () => {
+    try {
+      const response = await api.get('/treatments');
+      setTreatments(response.data);
+    } catch (err) {
+      console.error('Error fetching treatments:', err);
+    }
+  };
+
+  const saveSettings = async () => {
     try {
       setLoading(true);
       setError('');
       setSuccess('');
       
-      await api.put('/clinic-settings/info', clinicInfo);
-      setSuccess('✅ Clinic information updated successfully!');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error('Error saving clinic info:', err);
-      setError('Failed to save clinic information');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const saveWorkingHours = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      setSuccess('');
+      const allSettings = {
+        ...basicInfo,
+        ...workingHours,
+      };
       
-      await api.put('/clinic-settings/hours', workingHours);
-      setSuccess('✅ Working hours updated successfully!');
+      await api.post('/settings', allSettings);
+      setSuccess('Settings saved successfully!');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      console.error('Error saving working hours:', err);
-      setError('Failed to save working hours');
+      console.error('Error saving settings:', err);
+      setError('Failed to save settings');
     } finally {
       setLoading(false);
     }
   };
 
+  // Services CRUD
   const addService = async () => {
     try {
       setLoading(true);
       setError('');
       setSuccess('');
       
-      const newServiceData = {
-        title: newService.title,
-        description: newService.description,
-        icon_name: newService.icon_name,
-        sort_order: services.length + 1,
-      };
-      
-      const response = await api.post('/clinic-settings/services', newServiceData);
-      setServices([...services, response.data.service]);
-      setNewService({ title: '', description: '', icon_name: '🦷' });
-      setSuccess('✅ Service added successfully!');
+      await api.post('/services', newService);
+      setNewService({ name: '', description: '', icon_name: '??', sort_order: 0, is_active: true });
+      setSuccess('Service added successfully!');
       setTimeout(() => setSuccess(''), 3000);
+      fetchServices();
     } catch (err) {
       console.error('Error adding service:', err);
       setError('Failed to add service');
@@ -162,33 +173,30 @@ export default function Settings() {
       setError('');
       setSuccess('');
       
-      // Update local state first for immediate feedback
-      setServices(services.map(s => s.id === id ? { ...s, ...updates } : s));
-      
-      // Then update on server
-      await api.put('/clinic-settings/services', { services: services.map(s => s.id === id ? { ...s, ...updates } : s) });
-      setSuccess('✅ Service updated successfully!');
+      await api.put(`/services/${id}`, updates);
+      setSuccess('Service updated successfully!');
       setTimeout(() => setSuccess(''), 3000);
+      fetchServices();
     } catch (err) {
       console.error('Error updating service:', err);
       setError('Failed to update service');
-      // Revert local changes on error
-      fetchAllSettings();
     } finally {
       setLoading(false);
     }
   };
 
   const deleteService = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this service?')) return;
+    
     try {
       setLoading(true);
       setError('');
       setSuccess('');
       
-      await api.delete(`/clinic-settings/services/${id}`);
-      setServices(services.filter(s => s.id !== id));
-      setSuccess('✅ Service deleted successfully!');
+      await api.delete(`/services/${id}`);
+      setSuccess('Service deleted successfully!');
       setTimeout(() => setSuccess(''), 3000);
+      fetchServices();
     } catch (err) {
       console.error('Error deleting service:', err);
       setError('Failed to delete service');
@@ -197,22 +205,18 @@ export default function Settings() {
     }
   };
 
+  // Treatments CRUD
   const addTreatment = async () => {
     try {
       setLoading(true);
       setError('');
       setSuccess('');
       
-      if (!newTreatment.name || !newTreatment.price || !newTreatment.category) {
-        setError('Please fill in treatment name, category, and price');
-        return;
-      }
-      
-      const response = await api.post('/clinic-settings/treatments', newTreatment);
-      setTreatments([...treatments, response.data.treatment]);
+      await api.post('/treatments', newTreatment);
       setNewTreatment({ name: '', description: '', category: 'general', price: '', duration: '60' });
-      setSuccess('✅ Treatment added successfully!');
+      setSuccess('Treatment added successfully!');
       setTimeout(() => setSuccess(''), 3000);
+      fetchTreatments();
     } catch (err) {
       console.error('Error adding treatment:', err);
       setError('Failed to add treatment');
@@ -227,10 +231,10 @@ export default function Settings() {
       setError('');
       setSuccess('');
       
-      await api.put(`/clinic-settings/treatments/${id}`, updates);
-      setTreatments(treatments.map(t => t.id === id ? { ...t, ...updates } : t));
-      setSuccess('✅ Treatment updated successfully!');
+      await api.put(`/treatments/${id}`, updates);
+      setSuccess('Treatment updated successfully!');
       setTimeout(() => setSuccess(''), 3000);
+      fetchTreatments();
     } catch (err) {
       console.error('Error updating treatment:', err);
       setError('Failed to update treatment');
@@ -240,15 +244,17 @@ export default function Settings() {
   };
 
   const deleteTreatment = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this treatment?')) return;
+    
     try {
       setLoading(true);
       setError('');
       setSuccess('');
       
-      await api.delete(`/clinic-settings/treatments/${id}`);
-      setTreatments(treatments.filter(t => t.id !== id));
-      setSuccess('✅ Treatment deleted successfully!');
+      await api.delete(`/treatments/${id}`);
+      setSuccess('Treatment deleted successfully!');
       setTimeout(() => setSuccess(''), 3000);
+      fetchTreatments();
     } catch (err) {
       console.error('Error deleting treatment:', err);
       setError('Failed to delete treatment');
@@ -261,27 +267,17 @@ export default function Settings() {
     <div className="min-h-screen bg-gray-100">
       <AdminNavbar activePath="/admin/settings" />
       <div className="p-6 max-w-6xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-800 mb-6">⚙️ Clinic Settings</h1>
+        <h1 className="text-3xl font-bold text-gray-800 mb-6">Clinic Settings</h1>
 
         {success && (
-          <div className="bg-green-100 text-green-700 p-4 rounded-lg mb-6 border border-green-200">
-            ✅ {success}
+          <div className="bg-green-100 text-green-700 p-4 rounded-lg mb-6">
+            {success}
           </div>
         )}
 
         {error && (
-          <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-6 border border-red-200">
-            <div className="flex items-center justify-between">
-              <div>
-                ❌ {error}
-              </div>
-              <button
-                onClick={fetchAllSettings}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
-              >
-                🔄 Retry
-              </button>
-            </div>
+          <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-6">
+            {error}
           </div>
         )}
 
@@ -290,10 +286,10 @@ export default function Settings() {
           <div className="border-b">
             <div className="flex">
               {[
-                { id: 'basic', label: '🏥 Basic Info', icon: '🏥' },
-                { id: 'hours', label: '🕐 Working Hours', icon: '🕐' },
-                { id: 'services', label: '🎯 Services', icon: '🎯' },
-                { id: 'treatments', label: '💊 Treatments', icon: '💊' },
+                { id: 'basic', label: 'Basic Info' },
+                { id: 'hours', label: 'Working Hours' },
+                { id: 'services', label: 'Services' },
+                { id: 'treatments', label: 'Traitements' },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -304,7 +300,6 @@ export default function Settings() {
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                   }`}
                 >
-                  <span className="mr-2">{tab.icon}</span>
                   {tab.label}
                 </button>
               ))}
@@ -316,52 +311,52 @@ export default function Settings() {
             {/* Basic Info Tab */}
             {activeTab === 'basic' && (
               <div>
-                <h3 className="text-xl font-bold text-gray-800 mb-6">Clinic Information</h3>
+                <h3 className="text-xl font-bold text-gray-800 mb-6">Basic Information</h3>
                 <div className="grid grid-cols-2 gap-6">
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">Clinic Name</label>
                     <input
                       type="text"
-                      className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={clinicInfo.clinic_name}
-                      onChange={e => setClinicInfo({...clinicInfo, clinic_name: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">Email</label>
-                    <input
-                      type="email"
-                      className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={clinicInfo.email}
-                      onChange={e => setClinicInfo({...clinicInfo, email: e.target.value})}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                      value={basicInfo.clinic_name}
+                      onChange={e => setBasicInfo({...basicInfo, clinic_name: e.target.value})}
                     />
                   </div>
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">Phone</label>
                     <input
                       type="text"
-                      className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={clinicInfo.phone}
-                      onChange={e => setClinicInfo({...clinicInfo, phone: e.target.value})}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                      value={basicInfo.phone}
+                      onChange={e => setBasicInfo({...basicInfo, phone: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Email</label>
+                    <input
+                      type="email"
+                      className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                      value={basicInfo.email}
+                      onChange={e => setBasicInfo({...basicInfo, email: e.target.value})}
                     />
                   </div>
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">Address</label>
                     <input
                       type="text"
-                      className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={clinicInfo.address}
-                      onChange={e => setClinicInfo({...clinicInfo, address: e.target.value})}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                      value={basicInfo.address}
+                      onChange={e => setBasicInfo({...basicInfo, address: e.target.value})}
                     />
                   </div>
                 </div>
                 <div className="mt-6">
                   <button
-                    onClick={saveClinicInfo}
+                    onClick={saveSettings}
                     disabled={loading}
-                    className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
                   >
-                    {loading ? '⏳ Saving...' : '💾 Save Clinic Info'}
+                    {loading ? 'Saving...' : 'Save Settings'}
                   </button>
                 </div>
               </div>
@@ -370,64 +365,117 @@ export default function Settings() {
             {/* Working Hours Tab */}
             {activeTab === 'hours' && (
               <div>
-                <h3 className="text-xl font-bold text-gray-800 mb-6">Working Hours (Horaires)</h3>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                <h3 className="text-xl font-bold text-gray-800 mb-6">Working Hours (24-hour format)</h3>
+                
+                {/* Monday to Friday Group */}
+                <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                  <h4 className="font-medium text-gray-800 mb-4">Lundi - Vendredi</h4>
+                  <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-gray-700 text-sm font-medium mb-2">Monday - Friday</label>
-                      <div className="space-y-2">
-                        <input
-                          type="text"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          value={workingHours.monday_friday[0]}
-                          onChange={e => setWorkingHours({
-                            ...workingHours,
-                            monday_friday: [e.target.value, workingHours.monday_friday[1]]
-                          })}
-                          placeholder="08:00-13:00"
-                        />
-                        <input
-                          type="text"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          value={workingHours.monday_friday[1]}
-                          onChange={e => setWorkingHours({
-                            ...workingHours,
-                            monday_friday: [workingHours.monday_friday[0], e.target.value]
-                          })}
-                          placeholder="14:00-18:00"
-                        />
-                        <p className="text-xs text-gray-500">Lunch break: 13:00 - 14:00 (Fermé)</p>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-gray-700 text-sm font-medium mb-2">Saturday</label>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">Heure d'ouverture</label>
                       <input
-                        type="text"
-                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        value={workingHours.saturday}
-                        onChange={e => setWorkingHours({...workingHours, saturday: e.target.value})}
-                        placeholder="08:00-14:30"
+                        type="time"
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                        value={workingHours.monday_open}
+                        onChange={e => setWorkingHours({...workingHours, 
+                          monday_open: e.target.value, 
+                          tuesday_open: e.target.value,
+                          wednesday_open: e.target.value,
+                          thursday_open: e.target.value,
+                          friday_open: e.target.value
+                        })}
                       />
                     </div>
                     <div>
-                      <label className="block text-gray-700 text-sm font-medium mb-2">Sunday</label>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">Heure de fermeture</label>
                       <input
-                        type="text"
-                        className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-gray-50"
-                        value={workingHours.sunday}
-                        disabled
+                        type="time"
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                        value={workingHours.monday_close}
+                        onChange={e => setWorkingHours({...workingHours, 
+                          monday_close: e.target.value,
+                          tuesday_close: e.target.value,
+                          wednesday_close: e.target.value,
+                          thursday_close: e.target.value,
+                          friday_close: e.target.value
+                        })}
                       />
-                      <p className="text-xs text-gray-500 mt-1">Sunday is always closed</p>
                     </div>
                   </div>
                 </div>
+
+                {/* Saturday */}
+                <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                  <h4 className="font-medium text-gray-800 mb-4">Samedi</h4>
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">Heure d'ouverture</label>
+                      <input
+                        type="time"
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                        value={workingHours.saturday_open}
+                        onChange={e => setWorkingHours({...workingHours, saturday_open: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">Heure de fermeture</label>
+                      <input
+                        type="time"
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                        value={workingHours.saturday_close}
+                        onChange={e => setWorkingHours({...workingHours, saturday_close: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sunday */}
+                <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                  <h4 className="font-medium text-gray-800 mb-4">Dimanche</h4>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      className="mr-3 w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                      checked={workingHours.sunday_closed === '1'}
+                      onChange={e => setWorkingHours({...workingHours, sunday_closed: e.target.checked ? '1' : '0'})}
+                    />
+                    <label className="text-gray-700 font-medium">Fermé (Dimanche)</label>
+                  </div>
+                </div>
+
+                {/* Lunch Break */}
+                <div className="bg-blue-50 rounded-lg p-6 mb-6">
+                  <h4 className="font-medium text-gray-800 mb-4">Pause Déjeuner</h4>
+                  <p className="text-gray-600 text-sm mb-4">Les rendez-vous ne seront pas disponibles pendant cette période</p>
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">Début</label>
+                      <input
+                        type="time"
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                        value={workingHours.lunch_start}
+                        onChange={e => setWorkingHours({...workingHours, lunch_start: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">Fin</label>
+                      <input
+                        type="time"
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                        value={workingHours.lunch_end}
+                        onChange={e => setWorkingHours({...workingHours, lunch_end: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 <div className="mt-6">
                   <button
-                    onClick={saveWorkingHours}
+                    onClick={saveSettings}
                     disabled={loading}
-                    className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
                   >
-                    {loading ? '⏳ Saving...' : '💾 Save Working Hours'}
+                    {loading ? 'Saving...' : 'Save Settings'}
                   </button>
                 </div>
               </div>
@@ -436,49 +484,59 @@ export default function Settings() {
             {/* Services Tab */}
             {activeTab === 'services' && (
               <div>
-                <h3 className="text-xl font-bold text-gray-800 mb-6">Services Manager (Homepage Cards)</h3>
+                <h3 className="text-xl font-bold text-gray-800 mb-6">Services Management</h3>
                 
                 {/* Add New Service */}
                 <div className="bg-gray-50 rounded-lg p-4 mb-6">
                   <h4 className="font-medium text-gray-800 mb-4">Add New Service</h4>
-                  <div className="grid grid-cols-4 gap-4">
+                  <div className="grid grid-cols-5 gap-4">
                     <div>
                       <label className="block text-gray-700 text-sm font-medium mb-2">Icon</label>
                       <input
                         type="text"
-                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
                         value={newService.icon_name}
                         onChange={e => setNewService({...newService, icon_name: e.target.value})}
-                        placeholder="🦷"
+                        placeholder="??"
                       />
                     </div>
                     <div>
-                      <label className="block text-gray-700 text-sm font-medium mb-2">Title</label>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">Name</label>
                       <input
                         type="text"
-                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        value={newService.title}
-                        onChange={e => setNewService({...newService, title: e.target.value})}
-                        placeholder="Service title"
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                        value={newService.name}
+                        onChange={e => setNewService({...newService, name: e.target.value})}
+                        placeholder="Service name"
                       />
                     </div>
                     <div>
                       <label className="block text-gray-700 text-sm font-medium mb-2">Description</label>
                       <input
                         type="text"
-                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
                         value={newService.description}
                         onChange={e => setNewService({...newService, description: e.target.value})}
                         placeholder="Service description"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">Sort Order</label>
+                      <input
+                        type="number"
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                        value={newService.sort_order}
+                        onChange={e => setNewService({...newService, sort_order: parseInt(e.target.value) || 0})}
+                        placeholder="0"
                       />
                     </div>
                     <div className="flex items-end">
                       <button
                         onClick={addService}
                         disabled={loading}
-                        className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
+                        className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50"
                       >
-                        {loading ? '⏳ Adding...' : '➕ Add Service'}
+                        {loading ? 'Adding...' : 'Add Service'}
                       </button>
                     </div>
                   </div>
@@ -487,34 +545,43 @@ export default function Settings() {
                 {/* Existing Services */}
                 <div className="space-y-4">
                   {services.map((service, index) => (
-                    <div key={`service-${service.id}-${index}`} className="border border-gray-200 rounded-lg p-4">
-                      <div className="grid grid-cols-5 gap-4">
+                    <div key={service.id || index} className="border border-gray-200 rounded-lg p-4">
+                      <div className="grid grid-cols-6 gap-4">
                         <div>
                           <label className="block text-gray-700 text-sm font-medium mb-2">Icon</label>
                           <input
                             type="text"
-                            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
                             value={service.icon_name}
                             onChange={e => updateService(service.id, { icon_name: e.target.value })}
-                            placeholder="🦷"
+                            placeholder="??"
                           />
                         </div>
                         <div>
-                          <label className="block text-gray-700 text-sm font-medium mb-2">Title</label>
+                          <label className="block text-gray-700 text-sm font-medium mb-2">Name</label>
                           <input
                             type="text"
-                            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            value={service.title}
-                            onChange={e => updateService(service.id, { title: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                            value={service.name}
+                            onChange={e => updateService(service.id, { name: e.target.value })}
                           />
                         </div>
                         <div>
                           <label className="block text-gray-700 text-sm font-medium mb-2">Description</label>
                           <input
                             type="text"
-                            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
                             value={service.description}
                             onChange={e => updateService(service.id, { description: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-gray-700 text-sm font-medium mb-2">Sort Order</label>
+                          <input
+                            type="number"
+                            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                            value={service.sort_order}
+                            onChange={e => updateService(service.id, { sort_order: parseInt(e.target.value) || 0 })}
                           />
                         </div>
                         <div className="flex items-end">
@@ -524,14 +591,17 @@ export default function Settings() {
                           <button
                             onClick={() => deleteService(service.id)}
                             disabled={loading}
-                            className="bg-red-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
+                            className="bg-red-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-red-700 disabled:opacity-50"
                           >
-                            �️ Delete
+                            Delete
                           </button>
                         </div>
                       </div>
                     </div>
                   ))}
+                  {services.length === 0 && (
+                    <p className="text-gray-500 text-center py-8">No services available</p>
+                  )}
                 </div>
               </div>
             )}
@@ -539,7 +609,7 @@ export default function Settings() {
             {/* Treatments Tab */}
             {activeTab === 'treatments' && (
               <div>
-                <h3 className="text-xl font-bold text-gray-800 mb-6">Treatments Manager (Prices for Invoices)</h3>
+                <h3 className="text-xl font-bold text-gray-800 mb-6">Traitements Management</h3>
                 
                 {/* Add New Treatment */}
                 <div className="bg-gray-50 rounded-lg p-4 mb-6">
@@ -549,7 +619,7 @@ export default function Settings() {
                       <label className="block text-gray-700 text-sm font-medium mb-2">Name</label>
                       <input
                         type="text"
-                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
                         value={newTreatment.name}
                         onChange={e => setNewTreatment({...newTreatment, name: e.target.value})}
                         placeholder="Treatment name"
@@ -558,7 +628,7 @@ export default function Settings() {
                     <div>
                       <label className="block text-gray-700 text-sm font-medium mb-2">Category</label>
                       <select
-                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
                         value={newTreatment.category}
                         onChange={e => setNewTreatment({...newTreatment, category: e.target.value})}
                       >
@@ -574,7 +644,7 @@ export default function Settings() {
                       <label className="block text-gray-700 text-sm font-medium mb-2">Description</label>
                       <input
                         type="text"
-                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
                         value={newTreatment.description}
                         onChange={e => setNewTreatment({...newTreatment, description: e.target.value})}
                         placeholder="Optional description"
@@ -584,7 +654,7 @@ export default function Settings() {
                       <label className="block text-gray-700 text-sm font-medium mb-2">Price (MAD)</label>
                       <input
                         type="number"
-                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
                         value={newTreatment.price}
                         onChange={e => setNewTreatment({...newTreatment, price: e.target.value})}
                         placeholder="0"
@@ -593,7 +663,7 @@ export default function Settings() {
                     <div>
                       <label className="block text-gray-700 text-sm font-medium mb-2">Duration (min)</label>
                       <select
-                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
                         value={newTreatment.duration}
                         onChange={e => setNewTreatment({...newTreatment, duration: e.target.value})}
                       >
@@ -608,9 +678,9 @@ export default function Settings() {
                     <button
                       onClick={addTreatment}
                       disabled={loading}
-                      className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
+                      className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50"
                     >
-                      {loading ? '⏳ Adding...' : '➕ Add Treatment'}
+                      {loading ? 'Adding...' : 'Add Treatment'}
                     </button>
                   </div>
                 </div>
@@ -618,13 +688,13 @@ export default function Settings() {
                 {/* Existing Treatments */}
                 <div className="space-y-4">
                   {treatments.map((treatment, index) => (
-                    <div key={`treatment-${treatment.id}-${index}`} className="border border-gray-200 rounded-lg p-4">
+                    <div key={treatment.id || index} className="border border-gray-200 rounded-lg p-4">
                       <div className="grid grid-cols-6 gap-4">
                         <div>
                           <label className="block text-gray-700 text-sm font-medium mb-2">Name</label>
                           <input
                             type="text"
-                            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
                             value={treatment.name}
                             onChange={e => updateTreatment(treatment.id, { name: e.target.value })}
                           />
@@ -632,7 +702,7 @@ export default function Settings() {
                         <div>
                           <label className="block text-gray-700 text-sm font-medium mb-2">Category</label>
                           <select
-                            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
                             value={treatment.category}
                             onChange={e => updateTreatment(treatment.id, { category: e.target.value })}
                           >
@@ -648,7 +718,7 @@ export default function Settings() {
                           <label className="block text-gray-700 text-sm font-medium mb-2">Description</label>
                           <input
                             type="text"
-                            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
                             value={treatment.description || ''}
                             onChange={e => updateTreatment(treatment.id, { description: e.target.value })}
                           />
@@ -657,7 +727,7 @@ export default function Settings() {
                           <label className="block text-gray-700 text-sm font-medium mb-2">Price (MAD)</label>
                           <input
                             type="number"
-                            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
                             value={treatment.price}
                             onChange={e => updateTreatment(treatment.id, { price: parseFloat(e.target.value) || 0 })}
                           />
@@ -665,7 +735,7 @@ export default function Settings() {
                         <div>
                           <label className="block text-gray-700 text-sm font-medium mb-2">Duration (min)</label>
                           <select
-                            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
                             value={treatment.duration}
                             onChange={e => updateTreatment(treatment.id, { duration: parseInt(e.target.value) })}
                           >
@@ -679,14 +749,17 @@ export default function Settings() {
                           <button
                             onClick={() => deleteTreatment(treatment.id)}
                             disabled={loading}
-                            className="bg-red-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
+                            className="bg-red-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-red-700 disabled:opacity-50"
                           >
-                            🗑️ Delete
+                            Delete
                           </button>
                         </div>
                       </div>
                     </div>
                   ))}
+                  {treatments.length === 0 && (
+                    <p className="text-gray-500 text-center py-8">No treatments available</p>
+                  )}
                 </div>
               </div>
             )}

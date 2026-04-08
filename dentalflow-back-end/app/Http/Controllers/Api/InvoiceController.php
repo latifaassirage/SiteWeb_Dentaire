@@ -97,4 +97,22 @@ class InvoiceController extends Controller
             'total_transactions'=> (int) $totalTransactions ?: 0,
         ]);
     }
+
+    // Admin: Monthly revenue data for chart
+    public function monthly()
+    {
+        $data = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $month = now()->subMonths($i);
+            $amount = Invoice::where('status', 'paid')
+                ->whereMonth('paid_at', $month->month)
+                ->whereYear('paid_at', $month->year)
+                ->sum('amount');
+            $data[] = [
+                'month' => $month->format('M'),
+                'amount' => (float) $amount ?: 0,
+            ];
+        }
+        return response()->json($data);
+    }
 }
