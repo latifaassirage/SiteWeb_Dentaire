@@ -4,17 +4,45 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
+use App\Models\Appointment;
 use App\Models\Payment;
 use Illuminate\Http\Request;
 
 class InvoiceController extends Controller
 {
-    // Admin: كل الفواتير
-    public function index()
+    // Admin: tous les factures
+    public function index(Request $request)
     {
-        $invoices = Invoice::with(['patient', 'appointment.treatment'])
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $query = Invoice::with(['patient', 'appointment.treatment'])
+            ->orderBy('created_at', 'desc');
+        
+        // Filter by appointment_id if provided
+        if ($request->has('appointment_id')) {
+            $query->where('appointment_id', $request->appointment_id);
+        }
+        
+        $invoices = $query->get();
+        
+        // Log current invoice statuses for debugging
+        \Log::info('Current invoice statuses:', [
+            'total_invoices' => $invoices->count(),
+            'statuses' => $invoices->pluck('status')->unique()->toArray(),
+            'unpaid_count' => $invoices->where('status', 'unpaid')->count(),
+            'paid_count' => $invoices->where('status', 'paid')->count(),
+            'en_attente_count' => $invoices->where('status', 'en_attente_paiement')->count(),
+        ]);
+        
+        // CRITICAL: Verify no auto-paid invoices
+        $autoPaidInvoices = $invoices->filter(function($invoice) {
+            return $invoice->status === 'paid' && is_null($invoice->paid_at);
+        });
+        if ($autoPaidInvoices->count() > 0) {
+            \Log::error('CRITICAL: Found paid invoices without paid_at timestamp!', [
+                'count' => $autoPaidInvoices->count(),
+                'invoice_ids' => $autoPaidInvoices->pluck('id')->toArray()
+            ]);
+        }
+        
         return response()->json($invoices);
     }
 
@@ -47,8 +75,16 @@ class InvoiceController extends Controller
             'patient_id'     => $request->patient_id,
             'appointment_id' => $request->appointment_id,
             'amount'         => $request->amount,
-            'status'         => 'unpaid',
+            'status'         => 'en_attente_paiement',
             'issued_at'      => now(),
+        ]);
+
+        \Log::info('Invoice created in store method:', [
+            'invoice_id' => $invoice->id,
+            'status' => $invoice->status,
+            'amount' => $invoice->amount,
+            'appointment_id' => $invoice->appointment_id,
+            'requested_status' => $request->status
         ]);
 
         return response()->json($invoice, 201);
@@ -57,12 +93,62 @@ class InvoiceController extends Controller
     // Admin: Record Payment
     public function markAsPaid($id)
     {
-        $invoice = Invoice::findOrFail($id);
-        $invoice->update([
-            'status'  => 'paid',
-            'paid_at' => now(),
+        try {
+            $invoice = Invoice::findOrFail($id);
+            
+            // Update invoice status and set paid_at
+            $invoice->update([
+                'status'  => 'paid',
+                'paid_at' => now(),
+            ]);
+            
+            // Create payment record
+            Payment::create([
+                'appointment_id' => $invoice->appointment_id,
+                'patient_id'     => $invoice->patient_id,
+                'amount'         => $invoice->amount,
+                'status'         => 'paid',
+                'payment_method' => 'cash', // Default payment method
+                'description'    => 'Payment for invoice #' . $invoice->id,
+                'payment_date'   => now(),
+            ]);
+            
+            return response()->json(['message' => 'Payment recorded successfully']);
+        } catch (\Exception $e) {
+            \Log::error('Error marking invoice as paid:', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to record payment'], 500);
+        }
+    }
+
+    // Admin: Create unpaid invoice for terminé appointment
+    public function createUnpaidInvoice(Request $request)
+    {
+        $request->validate([
+            'appointment_id' => 'required|exists:appointments,id',
         ]);
-        return response()->json(['message' => 'Payment recorded successfully']);
+
+        $appointment = Appointment::findOrFail($request->appointment_id);
+        
+        // Check if invoice already exists
+        $existingInvoice = Invoice::where('appointment_id', $appointment->id)->first();
+        if ($existingInvoice) {
+            if ($existingInvoice->status === 'paid') {
+                return response()->json(['message' => 'Invoice already paid'], 400);
+            }
+            // Return existing unpaid invoice
+            return response()->json($existingInvoice);
+        }
+
+        // Create new unpaid invoice
+        $invoice = Invoice::create([
+            'patient_id'     => $appointment->patient_id,
+            'appointment_id' => $appointment->id,
+            'amount'         => $appointment->treatment->price ?? 0,
+            'status'         => 'unpaid',
+            'issued_at'      => now(),
+        ]);
+
+        return response()->json($invoice, 201);
     }
 
     // Admin: إحصائيات مالية
@@ -83,7 +169,9 @@ class InvoiceController extends Controller
         $unpaid = Invoice::where('status', 'unpaid')
             ->count();
 
+        // Total Pending = sum of amounts for invoices that are unpaid or en_attente_paiement
         $totalPending = Invoice::where('status', 'unpaid')
+            ->orWhere('status', 'en_attente_paiement')
             ->sum('amount');
 
         $totalTransactions = Invoice::count();
@@ -114,5 +202,65 @@ class InvoiceController extends Controller
             ];
         }
         return response()->json($data);
+    }
+
+    // Admin: Daily revenue for current month chart
+    public function dailyRevenue()
+    {
+        $data = [];
+        $currentMonth = now()->month;
+        $currentYear = now()->year;
+        $daysInMonth = now()->daysInMonth;
+
+        for ($day = 1; $day <= $daysInMonth; $day++) {
+            $date = now()->setDate($currentYear, $currentMonth, $day)->format('Y-m-d');
+            
+            $total = Invoice::where('status', 'paid')
+                ->whereDate('paid_at', $date)
+                ->sum('amount');
+                
+            $data[] = [
+                'date' => $date,
+                'total' => (float) $total ?: 0,
+            ];
+        }
+
+        return response()->json($data);
+    }
+
+    // Admin: Get terminé appointments without paid invoices
+    public function getTerminéAppointments()
+    {
+        try {
+            $terminéAppointments = Appointment::with(['patient', 'treatment'])
+                ->where('status', 'terminé')
+                ->whereDoesntHave('invoices', function($q) {
+                    $q->where('status', 'paid');
+                })
+                ->orderBy('start_time', 'desc')
+                ->get()
+                ->map(function($appointment) {
+                    return [
+                        'id' => null, // No invoice ID yet
+                        'patient_id' => $appointment->patient_id,
+                        'appointment_id' => $appointment->id,
+                        'amount' => $appointment->treatment->price ?? 0,
+                        'status' => 'en_attente_paiement',
+                        'issued_at' => $appointment->start_time,
+                        'paid_at' => null,
+                        'payment_date' => null,
+                        'created_at' => $appointment->start_time,
+                        'updated_at' => $appointment->updated_at,
+                        'patient' => $appointment->patient,
+                        'appointment' => $appointment,
+                        'is_terminé_appointment' => true
+                    ];
+                });
+
+            return response()->json($terminéAppointments);
+        } catch (\Exception $e) {
+            \Log::error('Error getting terminé appointments:', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to get terminé appointments'], 500);
+        }
     }
 }

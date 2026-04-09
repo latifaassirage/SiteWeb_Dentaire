@@ -70,8 +70,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/invoices',                  [InvoiceController::class, 'index']);
     Route::post('/invoices',                 [InvoiceController::class, 'store']);
     Route::put('/invoices/{id}/pay',         [InvoiceController::class, 'markAsPaid']);
+    Route::post('/invoices/create-unpaid',  [InvoiceController::class, 'createUnpaidInvoice']);
+    Route::post('/appointments/{id}/mark-as-paid', [AppointmentController::class, 'markAsPaid']);
     Route::get('/finance/stats',             [InvoiceController::class, 'stats']);
     Route::get('/finance/monthly',           [InvoiceController::class, 'monthly']);
+    Route::get('/finance/daily-revenue', [InvoiceController::class, 'dailyRevenue']);
 
     // Payment routes
     Route::get('/payments',                  [PaymentController::class, 'index']);

@@ -18,51 +18,68 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const [appointments, setAppointments] = useState([]);
   const [stats, setStats] = useState({ today: 0, month: 0, total: 0, unpaid: 0 });
-  const [financeStats, setFinanceStats] = useState({ total: 0, unpaid: 0 });
-  const [patientCount, setPatientCount] = useState(0);
+  const [patients, setPatients] = useState([]);
   const [monthlyData, setMonthlyData] = useState([]);
   const [loading, setLoading] = useState(true);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
   useEffect(() => {
-    fetchDashboardData();
+    // Appointments
+    api.get('/appointments')
+        .then(r => {
+          console.log('Appointments data:', r.data);
+          setAppointments(r.data || []);
+        })
+        .catch(err => console.error('appointments error:', err));
     
-    // Set up periodic refresh for real-time updates
-    const interval = setInterval(fetchDashboardData, 30000); // Refresh every 30 seconds
-    return () => clearInterval(interval);
+    // Finance stats
+    api.get('/finance/stats')
+        .then(r => {
+          console.log('Stats data:', r.data);
+          setStats(r.data || {});
+        })
+        .catch(err => console.error('stats error:', err));
+    
+    // Patients count
+    api.get('/patients')
+        .then(r => {
+          console.log('Patients data:', r.data);
+          setPatients(r.data || []);
+        })
+        .catch(err => console.error('patients error:', err));
+    
+    // Monthly revenue chart
+    api.get('/finance/monthly')
+        .then(r => {
+          console.log('Monthly data:', r.data);
+          setMonthlyData(r.data || []);
+        })
+        .catch(err => console.error('monthly error:', err));
+    
+    // Set loading to false after all calls
+    setTimeout(() => setLoading(false), 1000);
   }, []);
 
-  const fetchDashboardData = async () => {
-    try {
-      // Fetch all data in parallel
-      const [appointmentsResponse, financeResponse, patientsResponse, monthlyResponse] = await Promise.all([
-        api.get('/appointments'),
-        api.get('/finance/stats'),
-        api.get('/patients'),
-        api.get('/finance/monthly')
-      ]);
-      
-      console.log('📊 Finance stats response:', financeResponse.data);
-      console.log('� Patients count:', patientsResponse.data?.length);
-      
-      setFinanceStats(financeResponse.data || { total: 0, unpaid: 0 });
-      setPatientCount(patientsResponse.data?.length || 0);
-      setMonthlyData(monthlyResponse.data || []);
-      setAppointments(appointmentsResponse.data || []);
-    } catch (err) {
-      console.error('❌ Failed to fetch dashboard data:', err);
-      // Set safe defaults
-      setFinanceStats({ total: 0, unpaid: 0 });
-      setPatientCount(0);
-      setAppointments([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.clear();
-    window.location.href = '/login';
+  const handleRefresh = () => {
+    // Appointments
+    api.get('/appointments')
+        .then(r => setAppointments(r.data || []))
+        .catch(err => console.error('appointments error:', err));
+    
+    // Finance stats
+    api.get('/finance/stats')
+        .then(r => setStats(r.data || {}))
+        .catch(err => console.error('stats error:', err));
+    
+    // Patients count
+    api.get('/patients')
+        .then(r => setPatients(r.data || []))
+        .catch(err => console.error('patients error:', err));
+    
+    // Monthly revenue chart
+    api.get('/finance/monthly')
+        .then(r => setMonthlyData(r.data || []))
+        .catch(err => console.error('monthly error:', err));
   };
 
   return (
@@ -74,9 +91,9 @@ export default function AdminDashboard() {
         <h1 className="text-2xl font-bold text-gray-700 text-center mb-6">
           <div className="flex items-center justify-center gap-2">
             Dashboard
-            <button onClick={fetchDashboardData}
+            <button onClick={handleRefresh}
               className="text-sm bg-blue-100 text-blue-600 px-3 py-1 rounded-lg hover:bg-blue-200 transition-colors">
-              🔄 Refresh
+              Refresh
             </button>
           </div>
         </h1>
@@ -107,38 +124,38 @@ export default function AdminDashboard() {
                 <div className="bg-white rounded-xl shadow p-5">
                   <p className="text-gray-500 text-sm font-medium">Aujourd'hui</p>
                   <p className="text-gray-400 text-xs mb-2">Rendez-vous du jour</p>
-                  <p className="text-3xl font-bold text-gray-800">{stats?.appointments_today || 0}</p>
+                  <p className="text-3xl font-bold text-gray-800">{appointments.filter(a => new Date(a.start_time).toDateString() === new Date().toDateString()).length}</p>
                   <p className="text-blue-500 text-sm mt-1">📅 Consultations aujourd'hui</p>
-                  <p className="text-gray-400 text-sm mt-3">{stats?.pending || 0} en attente</p>
+                  <p className="text-gray-400 text-sm mt-3">{appointments.filter(a => a.status === 'en_attente').length} en attente</p>
                 </div>
 
                 {/* Total Revenue */}
                 <div className="bg-white rounded-xl shadow p-5">
                   <p className="text-gray-500 text-sm font-medium">Finances</p>
                   <p className="text-gray-400 text-xs mb-2">Revenue Total</p>
-                  <p className="text-3xl font-bold text-gray-800">{(financeStats?.total || 0).toLocaleString()} <span className="text-lg">MAD</span></p>
+                  <p className="text-3xl font-bold text-gray-800">{(stats.total || 0).toLocaleString()} <span className="text-lg">MAD</span></p>
                   <p className="text-green-500 text-sm mt-1">💰 Revenus générés</p>
-                  <p className="text-gray-400 text-sm mt-3">{patientCount} patients total</p>
+                  <p className="text-gray-400 text-sm mt-3">{(stats.total_pending || 0).toLocaleString()} MAD en attente</p>
                 </div>
 
                 {/* Total Patients */}
                 <div className="bg-white rounded-xl shadow p-5">
                   <p className="text-gray-500 text-sm font-medium">Patients</p>
                   <p className="text-gray-400 text-xs mb-2">Total Patients</p>
-                  <p className="text-3xl font-bold text-gray-800">{patientCount}</p>
+                  <p className="text-3xl font-bold text-gray-800">{patients.length}</p>
                   <p className="text-green-500 text-sm mt-1">👥 Patients inscrits</p>
-                  <p className="text-gray-400 text-sm mt-3">{stats?.pending || 0} en attente</p>
+                  <p className="text-gray-400 text-sm mt-3">{appointments.filter(a => a.status === 'confirmé').length} confirmés</p>
                 </div>
 
                 {/* Pending Appointments */}
                 <div className="bg-white rounded-xl shadow p-5">
                   <p className="text-gray-500 text-sm font-medium">En attente</p>
-                  <p className="text-gray-400 text-xs mb-2">Rendez-vous en attente</p>
-                  <p className="text-3xl font-bold text-gray-800">{stats?.pending || 0}</p>
+                  <p className="text-gray-400 text-xs mb-2">Patients en attente</p>
+                  <p className="text-3xl font-bold text-gray-800">{appointments.filter(a => a.status === 'en_attente').length}</p>
                   <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-600 text-xs px-2 py-1 rounded-full mt-2">
                     ⏳ En attente
                   </span>
-                  <p className="text-gray-400 text-xs mt-3">À confirmer</p>
+                  <p className="text-gray-400 text-xs mt-3">En cours de traitement</p>
                 </div>
               </div>
 
@@ -157,6 +174,44 @@ export default function AdminDashboard() {
           </div>
         </div>
 
+        {/* Today's Appointments Section */}
+        <div className="grid grid-cols-2 gap-6 mb-6">
+          {/* Today's Appointments List */}
+          <div className="bg-white rounded-xl shadow p-5">
+            <h3 className="font-bold text-gray-700 mb-4">Rendez-vous d'Aujourd'hui</h3>
+            {appointments.filter(a => new Date(a.start_time).toDateString() === new Date().toDateString()).length > 0 ? (
+              <div className="space-y-3">
+                {appointments.filter(a => new Date(a.start_time).toDateString() === new Date().toDateString()).map((appointment, index) => (
+                  <div key={appointment.id || index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-sm font-bold text-blue-600">
+                        {appointment.patient?.name?.charAt(0) || 'P'}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-800">{appointment.patient?.name}</p>
+                        <p className="text-sm text-gray-500">{appointment.treatment?.name}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full ${
+                        appointment.status === 'confirmé' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'
+                      }`}>
+                        {appointment.status === 'confirmé' ? 'Confirmé' : 'Terminé'}
+                      </span>
+                      <p className="text-xs text-gray-500 mt-1">{new Date(appointment.start_time).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <p className="text-lg">Aucun rendez-vous pour aujourd'hui</p>
+                <p className="text-sm mt-2">Les rendez-vous confirmés apparaîtront ici</p>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Recent Appointments */}
         <div className="bg-white rounded-xl shadow p-5">
           <h3 className="font-bold text-gray-700 mb-4">Rendez-vous Récents</h3>
@@ -170,38 +225,45 @@ export default function AdminDashboard() {
               </tr>
             </thead>
             <tbody>
-              {(stats?.recent_appointments || appointments.slice(0, 5)).map(a => (
-                <tr key={a.id} className="border-b hover:bg-gray-50">
-                  <td className="py-3 flex items-center gap-2">
-                    <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-sm font-bold text-gray-600">
-                      {(a.patient_name || a.patient?.name)?.charAt(0) || 'P'}
-                    </div>
-                    <span className="text-sm text-gray-700">{a.patient_name || a.patient?.name}</span>
-                  </td>
-                  <td className="py-3 text-sm text-gray-600">
-                    {new Date(a.date || a.start_time).toLocaleDateString('fr-MA')}
-                  </td>
-                  <td className="py-3 text-sm text-gray-600">{a.treatment_name || a.treatment?.name || 'Consultation'}</td>
-                  <td className="py-3">
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      a.status === 'confirmé' ? 'bg-green-100 text-green-600' :
-                      a.status === 'en_attente' ? 'bg-orange-100 text-orange-600' :
-                      a.status === 'terminé' ? 'bg-blue-100 text-blue-600' :
-                      a.status === 'annulé' ? 'bg-red-100 text-red-600' :
-                      'bg-gray-100 text-gray-600'
-                    }`}>
-                      {a.status === 'confirmé' ? '✅ Confirmed' :
-                       a.status === 'en_attente' ? '⏳ Pending' :
-                       a.status === 'terminé' ? '🏁 Completed' :
-                       a.status === 'annulé' ? '❌ Cancelled' :
-                       a.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {(!stats?.recent_appointments && appointments.length === 0) && (
+              {appointments.slice(0, 5).length > 0 ? (
+                appointments.slice(0, 5).map((appointment) => (
+                  <tr key={appointment.id} className="border-b hover:bg-gray-50">
+                    <td className="py-3 flex items-center gap-2">
+                      <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-sm font-bold text-gray-600">
+                        {appointment.patient?.name?.charAt(0) || 'P'}
+                      </div>
+                      <span className="text-sm text-gray-700">{appointment.patient?.name}</span>
+                    </td>
+                    <td className="py-3 text-sm text-gray-600">
+                      {new Date(appointment.start_time).toLocaleDateString('fr-FR', { 
+                        day: 'numeric', 
+                        month: 'short', 
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </td>
+                    <td className="py-3 text-sm text-gray-600">{appointment.treatment?.name}</td>
+                    <td className="py-3">
+                      <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full ${
+                        appointment.status === 'confirmé' ? 'bg-blue-100 text-blue-600' :
+                        appointment.status === 'terminé' ? 'bg-green-100 text-green-600' :
+                        appointment.status === 'annulé' ? 'bg-red-100 text-red-600' :
+                        'bg-gray-100 text-gray-600'
+                      }`}>
+                        {appointment.status === 'confirmé' ? 'Confirmé' :
+                         appointment.status === 'terminé' ? 'Terminé' :
+                         appointment.status === 'annulé' ? 'Annulé' :
+                         appointment.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
                 <tr>
-                  <td colSpan="4" className="py-6 text-center text-gray-400">No appointments yet</td>
+                  <td colSpan="4" className="py-8 text-center text-gray-500">
+                    <p>Aucun rendez-vous récent</p>
+                  </td>
                 </tr>
               )}
             </tbody>

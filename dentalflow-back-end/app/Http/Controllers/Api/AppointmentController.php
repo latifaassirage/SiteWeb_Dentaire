@@ -275,7 +275,7 @@ class AppointmentController extends Controller
         // Send status notifications
         $this->createStatusNotification($appointment, $dbStatus);
 
-        // Auto-create invoice and payment when appointment is marked as completed
+        // Auto-create invoice when appointment is marked as completed (but NOT payment)
         if ($request->status === 'completed') {
             try {
                 // Load treatment relationship if not already loaded
@@ -283,46 +283,11 @@ class AppointmentController extends Controller
                     $appointment->load('treatment');
                 }
                 
-                // Validate that appointment has treatment and patient
-                if (!$appointment->treatment) {
-                    \Log::error('Cannot complete appointment: No treatment assigned', [
-                        'appointment_id' => $appointment->id
-                    ]);
-                    return response()->json([
-                        'message' => 'Cannot complete appointment: No treatment assigned',
-                        'appointment_id' => $appointment->id
-                    ], 400);
-                }
-                
-                if (!$appointment->patient_id) {
-                    \Log::error('Cannot complete appointment: No patient assigned', [
-                        'appointment_id' => $appointment->id
-                    ]);
-                    return response()->json([
-                        'message' => 'Cannot complete appointment: No patient assigned',
-                        'appointment_id' => $appointment->id
-                    ], 400);
-                }
-                
-                if (!$appointment->treatment->price || $appointment->treatment->price <= 0) {
-                    \Log::error('Cannot complete appointment: Treatment has no valid price', [
-                        'appointment_id' => $appointment->id,
-                        'treatment_id' => $appointment->treatment->id,
-                        'price' => $appointment->treatment->price
-                    ]);
-                    return response()->json([
-                        'message' => 'Cannot complete appointment: Treatment has no valid price',
-                        'appointment_id' => $appointment->id,
-                        'treatment_id' => $appointment->treatment->id,
-                        'price' => $appointment->treatment->price
-                    ], 400);
-                }
-                
                 // Step A: Fetch treatment price (already loaded above)
                 $treatmentPrice = $appointment->treatment->price;
                 $treatmentName = $appointment->treatment->name;
                 
-                \Log::info('About to create invoice and payment for appointment:', [
+                \Log::info('About to create invoice for appointment:', [
                     'appointment_id' => $appointment->id,
                     'patient_id' => $appointment->patient_id,
                     'treatment_id' => $appointment->treatment->id,
@@ -330,70 +295,55 @@ class AppointmentController extends Controller
                     'price' => $treatmentPrice
                 ]);
                 
-                // Step B: Create Invoice (if not exists)
+                // Step B: Create Invoice (if not exists) - status = 'en_attente_paiement'
                 $existingInvoice = Invoice::where('appointment_id', $appointment->id)->first();
                 if (!$existingInvoice) {
                     $invoice = Invoice::create([
                         'appointment_id' => $appointment->id,
                         'patient_id'     => $appointment->patient_id,
                         'amount'         => $treatmentPrice,
-                        'status'         => 'unpaid', // Create as unpaid, admin can mark as paid later
+                        'status'         => 'en_attente_paiement', // Create as en_attente_paiement, admin can mark as paid later
                         'issued_at'      => now(),
                     ]);
                     
                     \Log::info('Invoice created successfully for appointment:', [
-                        'appointment_id' => $appointment->id,
                         'invoice_id' => $invoice->id,
-                        'amount' => $treatmentPrice
+                        'appointment_id' => $appointment->id,
+                        'amount' => $treatmentPrice,
+                        'status' => $invoice->status,
+                        'paid_at' => $invoice->paid_at
                     ]);
                 } else {
                     \Log::info('Invoice already exists for appointment:', [
                         'appointment_id' => $appointment->id,
-                        'existing_invoice_id' => $existingInvoice->id
+                        'existing_invoice_id' => $existingInvoice->id,
+                        'existing_status' => $existingInvoice->status,
+                        'existing_paid_at' => $existingInvoice->paid_at
                     ]);
                 }
                 
-                // Step C: Create Payment (if not exists)
-                $existingPayment = Payment::where('appointment_id', $appointment->id)->first();
-                if (!$existingPayment) {
-                    $payment = Payment::create([
+                // CRITICAL: Ensure we NEVER set status to 'paid' automatically
+                if ($existingInvoice && $existingInvoice->status === 'paid') {
+                    \Log::error('CRITICAL: Existing invoice already marked as paid!', [
                         'appointment_id' => $appointment->id,
-                        'patient_id'     => $appointment->patient_id,
-                        'amount'         => $treatmentPrice,
-                        'status'         => 'paid',
-                        'payment_method' => 'cash', // Default payment method
-                        'description'    => "Payment for " . ($treatmentName ?? 'Treatment'),
-                        'payment_date'   => now(),
-                    ]);
-                    
-                    \Log::info('Payment created successfully for appointment:', [
-                        'appointment_id' => $appointment->id,
-                        'payment_id' => $payment->id,
-                        'amount' => $treatmentPrice
-                    ]);
-                } else {
-                    \Log::info('Payment already exists for appointment:', [
-                        'appointment_id' => $appointment->id,
-                        'existing_payment_id' => $existingPayment->id
+                        'invoice_id' => $existingInvoice->id,
+                        'status' => $existingInvoice->status,
+                        'paid_at' => $existingInvoice->paid_at
                     ]);
                 }
                 
-                // Update finance stats immediately
-                $this->updateFinanceStats($treatmentPrice);
-                
-                // Send notifications to patient
-                $this->createInvoiceNotification($appointment);
-                $this->createPaymentNotification($appointment);
+                // Note: Payment will be created manually when admin clicks "Payé" button
+                // Do NOT create payment automatically
                 
             } catch (\Exception $e) {
-                \Log::error('Error creating invoice/payment:', [
+                \Log::error('Error creating invoice for completed appointment:', [
                     'appointment_id' => $appointment->id,
                     'error' => $e->getMessage(),
                     'trace' => $e->getTraceAsString()
                 ]);
                 
                 return response()->json([
-                    'message' => 'Failed to create invoice/payment: ' . $e->getMessage(),
+                    'message' => 'Error creating invoice: ' . $e->getMessage(),
                     'appointment_id' => $appointment->id
                 ], 500);
             }
@@ -448,7 +398,7 @@ class AppointmentController extends Controller
                     'appointment_id' => $appointment->id,
                     'patient_id' => $appointment->patient_id,
                     'amount' => $price,
-                    'status' => 'paid',
+                    'status' => 'en_attente_paiement',
                     'issued_at' => now()->format('Y-m-d H:i:s')
                 ]);
                 
@@ -456,8 +406,8 @@ class AppointmentController extends Controller
                     'appointment_id' => $appointment->id,
                     'patient_id' => $appointment->patient_id,
                     'amount' => $price,
-                    'status' => 'paid',
-                    'issued_at' => now()
+                    'status' => 'en_attente_paiement', // CRITICAL: Do NOT set to 'paid' automatically
+                    'issued_at' => now()->format('Y-m-d H:i:s')
                 ]);
                 
                 \Log::info('Invoice created successfully:', [
@@ -466,37 +416,15 @@ class AppointmentController extends Controller
                     'amount' => $price
                 ]);
                 
-                // Create Payment
-                \Log::info('About to create Payment with exact column names:', [
+                // CRITICAL: Do NOT create payment automatically - only when admin manually confirms
+                // Payment will be created manually when admin clicks "Payé" button in Finance page
+                \Log::info('Invoice created successfully:', [
+                    'invoice_id' => $invoice->id,
                     'appointment_id' => $appointment->id,
                     'amount' => $price,
-                    'payment_method' => 'cash',
-                    'status' => 'paid', // Use 'paid' as default in migration
-                    'payment_date' => now()->format('Y-m-d H:i:s')
+                    'status' => $invoice->status,
+                    'paid_at' => $invoice->paid_at
                 ]);
-                
-                try {
-                    $payment = Payment::create([
-                        'appointment_id' => $appointment->id,
-                        'amount' => $price,
-                        'payment_method' => 'cash',
-                        'status' => 'paid', // Use 'paid' as default in migration
-                        'payment_date' => now(),
-                    ]);
-                    
-                    \Log::info('Payment created successfully:', [
-                        'payment_id' => $payment->id,
-                        'appointment_id' => $appointment->id,
-                        'amount' => $price,
-                        'payment_date' => $payment->payment_date->format('Y-m-d H:i:s')
-                    ]);
-                } catch (\Exception $e) {
-                    \Log::error('Failed to create Payment:', [
-                        'error' => $e->getMessage(),
-                        'appointment_id' => $appointment->id,
-                        'amount' => $price
-                    ]);
-                }
                 
                 // Send notification to patient about invoice
                 $this->createInvoiceNotification($appointment);
@@ -634,5 +562,55 @@ class AppointmentController extends Controller
             'confirmed' => $confirmed,
             'cancelled' => $cancelled,
         ]);
+    }
+
+    // Admin: Mark appointment as paid
+    public function markAsPaid($id)
+    {
+        try {
+            $appointment = Appointment::findOrFail($id);
+            
+            // Update appointment status to 'payé'
+            $appointment->update([
+                'status' => 'payé',
+                'paid_at' => now(),
+            ]);
+            
+            // Create or update invoice
+            $invoice = Invoice::where('appointment_id', $id)->first();
+            if ($invoice) {
+                // Only update to paid if manually confirmed - this is the correct behavior
+                $invoice->update([
+                    'status' => 'paid',
+                    'paid_at' => now(),
+                ]);
+            } else {
+                // Create new invoice if it doesn't exist - start as en_attente_paiement
+                $invoice = Invoice::create([
+                    'patient_id' => $appointment->patient_id,
+                    'appointment_id' => $appointment->id,
+                    'amount' => $appointment->treatment->price ?? 0,
+                    'status' => 'en_attente_paiement', // CRITICAL: Start as en_attente_paiement
+                    'issued_at' => now(),
+                    // paid_at stays NULL until manual confirmation
+                ]);
+            }
+            
+            // Create payment record only when manually confirming payment
+            Payment::create([
+                'appointment_id' => $appointment->id,
+                'patient_id'     => $appointment->patient_id,
+                'amount'         => $appointment->treatment->price ?? 0,
+                'status'         => 'paid',
+                'payment_method' => 'cash', // Default payment method
+                'description'    => 'Payment for appointment #' . $appointment->id,
+                'payment_date'   => now(),
+            ]);
+            
+            return response()->json(['message' => 'Appointment marked as paid successfully']);
+        } catch (\Exception $e) {
+            \Log::error('Error marking appointment as paid:', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to mark appointment as paid'], 500);
+        }
     }
 }

@@ -20,35 +20,65 @@ class DashboardController extends Controller
             $allAppointments = Appointment::count();
             Log::info('Total appointments in database: ' . $allAppointments);
             
-            // Debug: Count by status
-            $enAttenteCount = Appointment::where('status', 'en_attente')->count();
-            $confirméCount = Appointment::where('status', 'confirmé')->count();
-            $terminéCount = Appointment::where('status', 'terminé')->count();
-            
-            Log::info('Appointment counts by status:', [
-                'en_attente' => $enAttenteCount,
-                'confirmé' => $confirméCount,
-                'terminé' => $terminéCount
-            ]);
-            
-            // Debug: Get sample appointments with status
-            $sampleAppointments = Appointment::select('id', 'status', 'start_time')
-                ->limit(5)
+            // Fix 1: Appointments Today - All confirmed appointments for today
+            $todayAppointments = Appointment::whereDate('start_time', today())
+                ->whereIn('status', ['confirmé', 'terminé'])
+                ->with(['patient', 'treatment'])
+                ->orderBy('start_time', 'asc')
                 ->get()
-                ->toArray();
-            Log::info('Sample appointments:', $sampleAppointments);
-            
-            // Get basic statistics with safe fallbacks
+                ->map(fn ($appointment) => [
+                    'id' => $appointment->id,
+                    'patient_name' => $appointment->patient?->name ?? 'Unknown',
+                    'treatment_name' => $appointment->treatment?->name ?? 'Consultation',
+                    'date' => $appointment->start_time->format('Y-m-d H:i'),
+                    'status' => $appointment->status,
+                ]);
+
+            // Fix 2: "En Attente" - Patients currently in clinic (confirmed OR terminé but not yet paid)
+            $enAttentePatients = Appointment::with(['patient', 'treatment'])
+                ->where(function($query) {
+                    // Waiting for doctor
+                    $query->where('status', 'confirmé')
+                          // OR waiting to pay (terminé but not paid)
+                          ->orWhere(function($subQuery) {
+                              $subQuery->where('status', 'terminé')
+                                       ->whereDoesntHave('invoices', function($invoiceQuery) {
+                                           $invoiceQuery->where('status', 'paid');
+                                       });
+                          });
+                })
+                ->orderBy('start_time', 'asc')
+                ->get()
+                ->map(fn ($appointment) => [
+                    'id' => $appointment->id,
+                    'patient_name' => $appointment->patient?->name ?? 'Unknown',
+                    'treatment_name' => $appointment->treatment?->name ?? 'Consultation',
+                    'date' => $appointment->start_time->format('Y-m-d H:i'),
+                    'status' => $appointment->status,
+                    'waiting_type' => $appointment->status === 'confirmé' ? 'doctor' : 'payment',
+                ]);
+
+            // Fix 3: Statistics Cards
             $stats = [
-                'appointments_today' => Appointment::whereDate('start_time', today())->count() ?? 0,
-                'pending' => $enAttenteCount,
-                'confirmed' => $confirméCount,
-                'completed' => $terminéCount,
+                'appointments_today' => Appointment::whereDate('start_time', today())
+                    ->whereIn('status', ['confirmé', 'terminé'])
+                    ->count() ?? 0,
+                'en_attente_count' => $enAttentePatients->count(),
+                'confirmed' => Appointment::where('status', 'confirmé')->count(),
+                'completed' => Appointment::where('status', 'terminé')->count(),
                 'total_patients' => User::where('role', 'patient')->count() ?? 0,
             ];
             
-            // Calculate revenue from payments only (actual money received)
-            $stats['total_revenue'] = Payment::where('status', 'paid')->sum('amount') ?? 0;
+            // Fix 4: Pending Payments - Sum of terminé appointments that are not paid
+            $pendingPayments = Appointment::join('invoices', 'appointments.id', '=', 'invoices.appointment_id')
+                ->where('appointments.status', 'terminé')
+                ->where('invoices.status', '!=', 'paid')
+                ->sum('invoices.amount');
+            
+            $stats['pending_payments'] = (float) $pendingPayments ?: 0;
+            
+            // Calculate revenue from paid invoices only (actual money received)
+            $stats['total_revenue'] = Invoice::where('status', 'paid')->sum('amount') ?? 0;
             $stats['paid_invoices'] = Invoice::where('status', 'paid')->count() ?? 0;
             
             // Get recent appointments with safe mapping
@@ -68,6 +98,8 @@ class DashboardController extends Controller
             $monthlyRevenue = $this->getMonthlyRevenue();
             
             $finalResponse = $stats + [
+                'today_appointments' => $todayAppointments,
+                'en_attente_patients' => $enAttentePatients,
                 'recent_appointments' => $recentAppointments,
                 'monthly_revenue' => $monthlyRevenue,
             ];
@@ -83,12 +115,15 @@ class DashboardController extends Controller
             
             return response()->json([
                 'appointments_today' => 0,
-                'pending' => 0,
+                'en_attente_count' => 0,
                 'confirmed' => 0,
                 'completed' => 0,
                 'total_patients' => 0,
+                'pending_payments' => 0,
                 'total_revenue' => 0,
                 'paid_invoices' => 0,
+                'today_appointments' => [],
+                'en_attente_patients' => [],
                 'recent_appointments' => [],
                 'monthly_revenue' => $this->getEmptyMonthlyRevenue(),
             ], 200);
@@ -101,22 +136,22 @@ class DashboardController extends Controller
             $allMonths = ['January', 'February', 'March', 'April', 'May', 'June', 
                           'July', 'August', 'September', 'October', 'November', 'December'];
             
-            // Get payment revenue by month only (actual money received)
-            $paymentMonthlyRevenue = Payment::where('status', 'paid')
-                ->whereYear('payment_date', now()->year)
-                ->selectRaw('MONTHNAME(payment_date) as month, SUM(amount) as revenue')
-                ->groupBy(DB::raw('MONTHNAME(payment_date)'))
-                ->orderBy(DB::raw('MONTH(payment_date)'))
+            // Get invoice revenue by month only (actual money received)
+            $invoiceMonthlyRevenue = Invoice::where('status', 'paid')
+                ->whereYear('paid_at', now()->year)
+                ->selectRaw('MONTHNAME(paid_at) as month, SUM(amount) as revenue')
+                ->groupBy(DB::raw('MONTHNAME(paid_at)'))
+                ->orderBy(DB::raw('MONTH(paid_at)'))
                 ->get()
                 ->keyBy('month');
             
-            // Return monthly revenue from payments only
-            return collect($allMonths)->map(function ($month) use ($paymentMonthlyRevenue) {
-                $paymentRevenue = $paymentMonthlyRevenue->get($month, (object) ['revenue' => 0])->revenue;
+            // Return monthly revenue from paid invoices only
+            return collect($allMonths)->map(function ($month) use ($invoiceMonthlyRevenue) {
+                $invoiceRevenue = $invoiceMonthlyRevenue->get($month, (object) ['revenue' => 0])->revenue;
                 
                 return [
                     'month' => substr($month, 0, 3),
-                    'revenue' => (float) $paymentRevenue,
+                    'revenue' => (float) $invoiceRevenue,
                 ];
             })->toArray();
         } catch (\Exception $e) {

@@ -104,7 +104,7 @@ export default function Agenda() {
             patient_id: Number(appointment.patient.id),
             appointment_id: Number(appointment.id),
             amount: Number(appointment.treatment.price),
-            status: 'unpaid'
+            status: 'en_attente_paiement'
           };
           console.log('Creating invoice:', invoiceData);
           const response = await api.post('/invoices', invoiceData);
