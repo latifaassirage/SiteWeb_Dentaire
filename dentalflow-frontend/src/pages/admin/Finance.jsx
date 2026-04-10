@@ -30,27 +30,40 @@ export default function Finance() {
     loadData();
   }, []);
 
-  const handlePay = async (item) => {
-    // Find the item to get amount for confirmation
+  const handlePaymentToggle = async (item) => {
+    const isPaid = item.status === 'paid';
     const amount = item ? (parseFloat(item.amount) || 0).toLocaleString('fr-FR') : '0';
     
     // Show confirmation popup
-    const confirmed = window.confirm(`Confirmer le paiement en espèces de ${amount} MAD ?`);
+    const action = isPaid ? 'annuler le paiement' : 'confirmer le paiement';
+    const confirmed = window.confirm(`${action === 'confirmer le paiement' ? 'Confirmer' : 'Annuler'} le paiement de ${amount} MAD ?`);
     
     if (confirmed) {
       try {
-        // Handle invoice payment
-        await api.put(`/invoices/${item.id}/pay`);
+        // Handle payment toggle
+        const endpoint = isPaid ? `/invoices/${item.id}/unpay` : `/invoices/${item.id}/pay`;
+        await api.put(endpoint);
         
         // Refresh data
-        const response = await api.get('/invoices');
-        setInvoices(response.data || []);
-        api.get('/finance/stats').then(r => setStats(r.data)).catch(() => {});
-        api.get('/finance/daily-revenue').then(r => setDailyData(r.data)).catch(() => {});
+        refreshData();
       } catch (error) {
-        console.error('Error marking as paid:', error);
-        alert('Erreur lors de la confirmation du paiement');
+        console.error(`Error ${isPaid ? 'canceling' : 'marking'} payment:`, error);
+        alert(`Erreur lors de l'${isPaid ? 'annulation' : 'confirmation'} du paiement`);
       }
+    }
+  };
+
+  const refreshData = async () => {
+    try {
+      // Get invoices directly from database
+      const response = await api.get('/invoices');
+      setInvoices(response.data || []);
+      
+      // Load other data
+      api.get('/finance/stats').then(r => setStats(r.data)).catch(() => {});
+      api.get('/finance/daily-revenue').then(r => setDailyData(r.data)).catch(() => {});
+    } catch (error) {
+      console.error('Error refreshing data:', error);
     }
   };
 
@@ -173,19 +186,7 @@ export default function Finance() {
               <h3 className="font-bold text-gray-800 text-lg">Toutes les Transactions</h3>
               <p className="text-sm text-gray-500 mt-1">Factures et paiements des patients</p>
             </div>
-            <button onClick={async () => {
-              try {
-                // Get invoices directly from database
-                const response = await api.get('/invoices');
-                setInvoices(response.data || []);
-                
-                // Load other data
-                api.get('/finance/stats').then(r => setStats(r.data)).catch(() => {});
-                api.get('/finance/daily-revenue').then(r => setDailyData(r.data)).catch(() => {});
-              } catch (error) {
-                console.error('Error refreshing data:', error);
-              }
-            }} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm">
+            <button onClick={refreshData} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm">
               🔄 Actualiser
             </button>
           </div>
@@ -214,17 +215,20 @@ export default function Finance() {
                     </span>
                   </td>
                   <td className="p-4 border-r border-gray-100">
-                    {inv.status === 'unpaid' ? (
+                    {inv.status === 'paid' ? (
                       <button 
-                        onClick={() => handlePay(inv)}
-                        className="bg-orange-500 text-white px-3 py-2 rounded-lg text-xs font-medium hover:bg-orange-600 transition-colors shadow-sm w-full"
+                        onClick={() => handlePaymentToggle(inv)}
+                        className="px-3 py-2 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200 w-full hover:bg-green-200 transition-colors cursor-pointer"
                       >
-                        Valider Paiement
+                        ✅ Payé
                       </button>
-                    ) : inv.status === 'paid' ? (
-                      <span className="px-3 py-2 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200 w-full inline-block text-center">
-                        Payé
-                      </span>
+                    ) : inv.status === 'unpaid' || inv.status === 'en_attente_paiement' ? (
+                      <button 
+                        onClick={() => handlePaymentToggle(inv)}
+                        className="px-3 py-2 rounded-full text-xs font-medium bg-orange-100 text-orange-700 border border-orange-200 w-full hover:bg-orange-200 transition-colors cursor-pointer"
+                      >
+                        ⏳ En attente de paiement
+                      </button>
                     ) : (
                       <span className="px-3 py-2 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200 w-full inline-block text-center">
                         {inv.status}

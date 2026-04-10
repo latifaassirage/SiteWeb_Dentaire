@@ -43,6 +43,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Clinic settings
     Route::get('/clinic-settings', [ClinicSettingsController::class, 'index']);
     Route::get('/clinic-settings/working-hours', [ClinicSettingsController::class, 'getWorkingHours']);
+    Route::get('/clinic-settings/booking', [ClinicSettingsController::class, 'getBookingSettings']);
 
     // Patient routes
     Route::get('/my-appointments',           [AppointmentController::class, 'myAppointments']);
@@ -51,6 +52,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/appointments',             [AppointmentController::class, 'store']);
     Route::put('/appointments/{id}/cancel',  [AppointmentController::class, 'cancel']);
     Route::get('/my-invoices',               [InvoiceController::class, 'myInvoices']);
+    Route::get('/my-unpaid-invoices',      [InvoiceController::class, 'myUnpaidInvoices']);
     
     // Notifications
     Route::get('/notifications',             [NotificationController::class, 'index']);
@@ -61,6 +63,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dashboard',                 [DashboardController::class, 'index']);
     Route::get('/appointments',              [AppointmentController::class, 'index']);
     Route::get('/appointments/stats',         [AppointmentController::class, 'stats']);
+    Route::get('/appointments/treatments-stats', [AppointmentController::class, 'treatmentsStats']);
     Route::put('/appointments/{id}/confirm', [AppointmentController::class, 'confirm']);
     Route::put('/appointments/{id}/status', [AppointmentController::class, 'updateStatus']);
     Route::patch('/appointments/{id}',       [AppointmentController::class, 'update']);
@@ -76,6 +79,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/invoices',                  [InvoiceController::class, 'index']);
     Route::post('/invoices',                 [InvoiceController::class, 'store']);
     Route::put('/invoices/{id}/pay',         [InvoiceController::class, 'markAsPaid']);
+    Route::put('/invoices/{id}/unpay',       [InvoiceController::class, 'markAsUnpaid']);
     Route::post('/invoices/create-unpaid',  [InvoiceController::class, 'createUnpaidInvoice']);
     Route::post('/appointments/{id}/mark-as-paid', [AppointmentController::class, 'markAsPaid']);
     Route::get('/finance/stats',             [InvoiceController::class, 'stats']);

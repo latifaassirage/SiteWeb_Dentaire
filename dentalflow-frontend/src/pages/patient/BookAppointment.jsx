@@ -39,14 +39,14 @@ export default function BookAppointment() {
 
   // Fetch clinic settings and available slots when date and treatment are selected
   useEffect(() => {
-    if (selectedDate && selectedTreatment && clinicSettings) {
+    if (selectedDate && selectedTreatment && clinicSettings && clinicSettings.daily_hours) {
       generateAvailableSlots();
     }
   }, [selectedDate, selectedTreatment, clinicSettings]);
 
   const fetchClinicSettings = async () => {
     try {
-      const response = await api.get('/clinic-settings/working-hours');
+      const response = await api.get('/clinic-settings/booking');
       if (response.data.success) {
         setClinicSettings(response.data.data);
       }
@@ -55,61 +55,89 @@ export default function BookAppointment() {
     }
   };
 
+  const isDateAvailable = (dateString) => {
+    if (!clinicSettings) return false;
+    
+    const date = new Date(dateString);
+    const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const currentDay = dayNames[dayOfWeek];
+    
+    // Sunday is always closed as per requirements
+    if (dayOfWeek === 0) { // Sunday
+      return false;
+    }
+    
+    // Get the specific day's settings from database
+    const daySettings = clinicSettings.daily_hours?.[currentDay];
+    
+    // Check if clinic is closed on this day (default to false if no settings)
+    return !(daySettings?.closed === true);
+  };
+
   const generateAvailableSlots = () => {
     if (!selectedDate || !selectedTreatment || !clinicSettings) return;
 
-    const dayOfWeek = new Date(selectedDate).getDay(); // 0=Sunday, 1=Monday
+    const dayOfWeek = new Date(selectedDate).getDay(); // 0=Sunday, 1=Monday, 6=Saturday
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const currentDay = dayNames[dayOfWeek];
     
-    // Check if day is available for patients (Mon-Fri only)
-    if (dayOfWeek === 0) { // Sunday
+    // Get the specific day's settings from database
+    const daySettings = clinicSettings.daily_hours[currentDay];
+    
+    if (daySettings?.closed) {
       setAvailableSlots([]);
       return;
     }
     
-    // Get clinic working hours from settings
-    const openingTime = clinicSettings.opening_time || '08:00';
-    let closingTime = clinicSettings.closing_time || '18:30';
-    const lunchStart = clinicSettings.lunch_start || '13:00';
-    const lunchEnd = clinicSettings.lunch_end || '14:00';
+    // Parse the clinic working hours from database for this specific day
+    const openingTime = daySettings?.open || '08:00';
+    let closingTime = daySettings?.close || '18:00';
     
-    // Different closing time for Saturday
+    // Special Saturday logic: force closing at 14:00 regardless of database
     if (dayOfWeek === 6) { // Saturday
-      closingTime = clinicSettings.saturday_closing_time || '14:00'; // Use Saturday-specific closing time
+      closingTime = '14:00';
     }
+    
+    const lunchStart = clinicSettings.lunch_break?.start || '13:00';
+    const lunchEnd = clinicSettings.lunch_break?.end || '14:00';
+    const slotDuration = 30; // Fixed 30-minute slots as requested
     
     const slots = [];
     const treatmentDuration = selectedTreatment.duration || 30;
     
-    // Parse opening and closing times
-    const [openHour] = openingTime.split(':').map(Number);
-    const [closeHour] = closingTime.split(':').map(Number);
+    // Parse opening and closing times (24-hour format)
+    const [openHour = 8, openMinute = 0] = openingTime?.split(':').map(Number) || [8, 0];
+    const [closeHour = 18, closeMinute = 0] = closingTime?.split(':').map(Number) || [18, 0];
+    const [lunchStartHour = 13, lunchStartMinute = 0] = lunchStart?.split(':').map(Number) || [13, 0];
+    const [lunchEndHour = 14, lunchEndMinute = 0] = lunchEnd?.split(':').map(Number) || [14, 0];
     
-    // Generate hourly slots with day-specific closing times
-    let currentSlot = openHour;
-    let maxSlot = closeHour;
+    // Convert to minutes for easier calculation
+    const openMinutes = openHour * 60 + openMinute;
+    const closeMinutes = closeHour * 60 + closeMinute;
+    const lunchStartMinutes = lunchStartHour * 60 + lunchStartMinute;
+    const lunchEndMinutes = lunchEndHour * 60 + lunchEndMinute;
     
-    // Adjust maximum slot based on day of week
-    if (dayOfWeek === 6) { // Saturday
-      maxSlot = 14; // Saturday: last slot is 13:00 (60min treatment finishes 14:00)
-    } else {
-      maxSlot = 17; // Weekday: last slot is 17:00 (60min treatment finishes 18:00)
-    }
+    // Generate time slots every 30 minutes
+    let currentMinutes = openMinutes;
     
-    while (currentSlot <= maxSlot) {
-      const slotEndTime = currentSlot + (treatmentDuration / 60);
-      
-      // Skip lunch break
-      if (currentSlot >= 13 && currentSlot < 14) {
-        currentSlot = 14; // Jump to after lunch
+    while (currentMinutes + treatmentDuration <= closeMinutes) {
+      // Skip lunch break completely - don't show any slots between 13:00-14:00
+      if (currentMinutes >= lunchStartMinutes && currentMinutes < lunchEndMinutes) {
+        currentMinutes = lunchEndMinutes; // Jump to after lunch
         continue;
       }
       
-      // Ensure slot doesn't exceed closing time
-      if (slotEndTime <= closeHour) {
-        slots.push(`${currentSlot.toString().padStart(2, '0')}:00`);
+      // Ensure the last slot allows for 60-minute treatment duration
+      const slotEndMinutes = currentMinutes + treatmentDuration;
+      if (slotEndMinutes <= closeMinutes) {
+        const hour = Math.floor(currentMinutes / 60);
+        const minute = currentMinutes % 60;
+        slots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
       }
       
-      currentSlot++; // Next hour slot
+      // Move to next 30-minute slot
+      currentMinutes += slotDuration;
     }
     
     setAvailableSlots(slots);
@@ -182,6 +210,10 @@ export default function BookAppointment() {
     if (step === 2) {
       if (!selectedDate) {
         setError('Veuillez sélectionner une date.');
+        return;
+      }
+      if (!isDateAvailable(selectedDate)) {
+        setError('La clinique est fermée ce jour-là. Veuillez choisir une autre date.');
         return;
       }
       if (!selectedTime) {
@@ -332,7 +364,7 @@ export default function BookAppointment() {
 
               {/* Date */}
               <div className="mb-4">
-                <label className="block text-gray-600 text-sm mb-2 font-medium">📅 Date du rendez-vous</label>
+                <label className="block text-gray-600 text-sm mb-2 font-medium">?? Date du rendez-vous</label>
                 <input type="date"
                   min={today}
                   className="w-full border border-gray-300 p-3 rounded-xl focus:outline-none text-gray-700"
@@ -342,12 +374,36 @@ export default function BookAppointment() {
                     setSelectedTime('');
                     setError('');
                   }} />
+                {selectedDate && !isDateAvailable(selectedDate) && (
+                  <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-red-600 text-sm">
+                      ?? La clinique est fermée ce jour-là. Veuillez choisir une autre date.
+                    </p>
+                  </div>
+                )}
+                {selectedDate && isDateAvailable(selectedDate) && clinicSettings && (() => {
+                    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                    const currentDay = dayNames[new Date(selectedDate).getDay()];
+                    const daySettings = clinicSettings.daily_hours?.[currentDay];
+                    return daySettings?.open && daySettings?.close;
+                  })() && (
+                  <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-green-600 text-sm">
+                      ?? La clinique est ouverte ce jour-là de {(() => {
+                        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                        const currentDay = dayNames[new Date(selectedDate).getDay()];
+                        const daySettings = clinicSettings.daily_hours?.[currentDay];
+                        return `${daySettings?.open || '08:00'} à ${daySettings?.close || '18:30'}`;
+                      })()}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Time Slots */}
               {selectedDate && (
                 <div>
-                  <label className="block text-gray-600 text-sm mb-2 font-medium">🕐 Heure de début</label>
+                  <label className="block text-gray-600 text-sm mb-2 font-medium">?? Heure de début</label>
                   <div className="grid grid-cols-4 gap-2">
                     {availableSlots.length > 0 ? (
                       availableSlots.map(time => (

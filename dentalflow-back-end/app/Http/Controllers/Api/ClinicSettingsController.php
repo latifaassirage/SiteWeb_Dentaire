@@ -55,6 +55,70 @@ class ClinicSettingsController extends Controller
     }
 
     /**
+     * Get detailed working hours for booking system
+     */
+    public function getBookingSettings()
+    {
+        try {
+            $settings = [
+                'daily_hours' => [
+                    'monday' => [
+                        'open' => ClinicSettings::get('monday_open', '08:00'),
+                        'close' => ClinicSettings::get('monday_close', '18:00'), // 6:00 PM
+                        'closed' => ClinicSettings::get('monday_closed', '0') == '1',
+                    ],
+                    'tuesday' => [
+                        'open' => ClinicSettings::get('tuesday_open', '08:00'),
+                        'close' => ClinicSettings::get('tuesday_close', '18:00'), // 6:00 PM
+                        'closed' => ClinicSettings::get('tuesday_closed', '0') == '1',
+                    ],
+                    'wednesday' => [
+                        'open' => ClinicSettings::get('wednesday_open', '08:00'),
+                        'close' => ClinicSettings::get('wednesday_close', '18:00'), // 6:00 PM
+                        'closed' => ClinicSettings::get('wednesday_closed', '0') == '1',
+                    ],
+                    'thursday' => [
+                        'open' => ClinicSettings::get('thursday_open', '08:00'),
+                        'close' => ClinicSettings::get('thursday_close', '18:00'), // 6:00 PM
+                        'closed' => ClinicSettings::get('thursday_closed', '0') == '1',
+                    ],
+                    'friday' => [
+                        'open' => ClinicSettings::get('friday_open', '08:00'),
+                        'close' => ClinicSettings::get('friday_close', '18:00'), // 6:00 PM
+                        'closed' => ClinicSettings::get('friday_closed', '0') == '1',
+                    ],
+                    'saturday' => [
+                        'open' => ClinicSettings::get('saturday_open', '08:00'),
+                        'close' => ClinicSettings::get('saturday_close', '14:00'), // 2:00 PM
+                        'closed' => ClinicSettings::get('saturday_closed', '0') == '1',
+                    ],
+                    'sunday' => [
+                        'open' => '00:00',
+                        'close' => '00:00',
+                        'closed' => true, // Always closed on Sunday
+                    ],
+                ],
+                'lunch_break' => [
+                    'start' => ClinicSettings::get('lunch_start', '13:00'), // 1 PM
+                    'end' => ClinicSettings::get('lunch_end', '14:00'), // 2 PM
+                ],
+                'appointment_settings' => [
+                    'slot_duration' => 30, // minutes
+                    'buffer_time' => 15, // minutes between appointments
+                ]
+            ];
+            
+            return response()->json([
+                'success' => true,
+                'data' => $settings
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching booking settings:', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to fetch booking settings'], 500);
+        }
+    }
+
+    /**
      * Update clinic basic info
      */
     public function updateClinicInfo(Request $request)

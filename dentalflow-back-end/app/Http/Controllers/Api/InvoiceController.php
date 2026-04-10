@@ -45,7 +45,7 @@ class InvoiceController extends Controller
         return response()->json($invoices);
     }
 
-    // Patient: My Invoices
+    // Patient: My Invoices (all)
     public function myInvoices(Request $request)
     {
         $invoices = Invoice::where('patient_id', $request->user()->id)
@@ -53,6 +53,29 @@ class InvoiceController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
         return response()->json($invoices);
+    }
+
+    // Patient: My Unpaid Invoices
+    public function myUnpaidInvoices(Request $request)
+    {
+        $invoices = Invoice::where('patient_id', $request->user()->id)
+            ->whereIn('status', ['unpaid', 'en_attente_paiement'])
+            ->with('appointment.treatment')
+            ->orderBy('created_at', 'desc')
+            ->get();
+            
+        // Calculate summary
+        $totalAmount = $invoices->sum('amount');
+        $totalCount = $invoices->count();
+        
+        return response()->json([
+            'invoices' => $invoices,
+            'summary' => [
+                'total_count' => $totalCount,
+                'total_amount' => (float) $totalAmount,
+                'formatted_amount' => number_format($totalAmount, 2, ',', ' ') . ' MAD'
+            ]
+        ]);
     }
 
     // Admin: Create Invoice
@@ -67,7 +90,7 @@ class InvoiceController extends Controller
             'patient_id'     => 'required|exists:users,id',
             'appointment_id' => 'required|exists:appointments,id',
             'amount'         => 'required|numeric|min:0',
-            'status'         => 'required|in:unpaid,paid',
+            'status'         => 'required|in:unpaid,paid,en_attente_paiement',
         ]);
 
         $invoice = Invoice::create([
@@ -116,6 +139,28 @@ class InvoiceController extends Controller
         } catch (\Exception $e) {
             \Log::error('Error marking invoice as paid:', ['error' => $e->getMessage()]);
             return response()->json(['error' => 'Failed to record payment'], 500);
+        }
+    }
+
+    // Admin: Cancel Payment
+    public function markAsUnpaid($id)
+    {
+        try {
+            $invoice = Invoice::findOrFail($id);
+            
+            // Update invoice status and clear paid_at
+            $invoice->update([
+                'status'  => 'en_attente_paiement',
+                'paid_at' => null,
+            ]);
+            
+            // Delete payment record if exists
+            Payment::where('appointment_id', $invoice->appointment_id)->delete();
+            
+            return response()->json(['message' => 'Payment cancelled successfully']);
+        } catch (\Exception $e) {
+            \Log::error('Error marking invoice as unpaid:', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to cancel payment'], 500);
         }
     }
 

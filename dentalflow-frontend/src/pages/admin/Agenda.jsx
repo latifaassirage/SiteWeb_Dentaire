@@ -95,27 +95,11 @@ export default function Agenda() {
     e.stopPropagation();
     try {
       await api.put(`/appointments/${id}`, { status: 'terminé' });
-      const appointment = appointments.find(a => a.id === id);
-      if (appointment?.patient && appointment?.treatment) {
-        // Check if invoice already exists for this appointment
-        const existing = await api.get(`/invoices?appointment_id=${id}`);
-        if (!existing.data || existing.data.length === 0) {
-          const invoiceData = {
-            patient_id: Number(appointment.patient.id),
-            appointment_id: Number(appointment.id),
-            amount: Number(appointment.treatment.price),
-            status: 'en_attente_paiement'
-          };
-          console.log('Creating invoice:', invoiceData);
-          const response = await api.post('/invoices', invoiceData);
-          console.log('Invoice created:', response.data);
-        } else {
-          console.log('Invoice already exists for appointment:', id);
-        }
-      }
+      // Remove the completed appointment from the list immediately
       setAppointments(prev => prev.filter(a => a.id !== id));
     } catch (err) {
-      console.error(err);
+      console.error('Error marking appointment as completed:', err);
+      alert('Erreur lors de la validation du rendez-vous');
     }
   };
 
