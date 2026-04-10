@@ -29,17 +29,7 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        // Create doctor user
-        User::updateOrCreate(
-            ['email' => 'doctor@dentalflow.com'],
-            [
-                'name' => 'Dr. Sarah Johnson',
-                'password' => Hash::make('password'),
-                'phone' => '+212600000001',
-                'role' => 'doctor',
-            ]
-        );
-
+        
         // Create sample patients
         $patient1 = User::updateOrCreate(
             ['email' => 'john@example.com'],
@@ -98,7 +88,6 @@ class DatabaseSeeder extends Seeder
 
         $this->command->info('Database seeded successfully!');
         $this->command->info('Admin login: admin@dentalflow.com / password');
-        $this->command->info('Doctor login: doctor@dentalflow.com / password');
         $this->command->info('Patient login: john@example.com / password');
     }
 }

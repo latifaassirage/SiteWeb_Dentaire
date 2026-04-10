@@ -9,11 +9,16 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [show2FA, setShow2FA] = useState(false);
+  const [twoFACode, setTwoFACode] = useState('');
+  const [userId, setUserId] = useState(null);
+  const [message, setMessage] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setMessage('');
 
     try {
       const res = await axios.post('http://127.0.0.1:8000/api/login', 
@@ -21,7 +26,26 @@ export default function Login() {
         { headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' } }
       );
 
-      const { user, token } = res.data;
+      const data = res.data;
+
+      // Handle 2FA requirement
+      if (data.requires_2fa) {
+        setShow2FA(true);
+        setUserId(data.user_id);
+        setMessage('Code 2FA envoyé à votre email. Veuillez vérifier votre boîte de réception.');
+        setLoading(false);
+        return;
+      }
+
+      // Handle email verification requirement
+      if (data.requires_email_verification) {
+        setError(data.message);
+        setLoading(false);
+        return;
+      }
+
+      // Normal login flow (for backward compatibility)
+      const { user, token } = data;
 
       if (tab === 'patient' && user.role !== 'patient') {
         setError("Ce compte n'est pas un compte patient.");
@@ -29,7 +53,7 @@ export default function Login() {
         return;
       }
 
-      if (tab === 'admin' && user.role !== 'admin' && user.role !== 'doctor') {
+      if (tab === 'admin' && user.role !== 'admin') {
         setError("Ce compte n'est pas un compte administrateur.");
         setLoading(false);
         return;
@@ -38,7 +62,7 @@ export default function Login() {
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
 
-      if (user.role === 'admin' || user.role === 'doctor') {
+      if (user.role === 'admin') {
         window.location.href = '/admin/dashboard';
       } else {
         window.location.href = '/patient/dashboard';
@@ -46,6 +70,49 @@ export default function Login() {
 
     } catch (err) {
       setError('Email ou mot de passe incorrect.');
+      setLoading(false);
+    }
+  };
+
+  const handle2FAVerification = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await axios.post('http://127.0.0.1:8000/api/verify-2fa', 
+        { user_id: userId, code: twoFACode },
+        { headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' } }
+      );
+
+      const { user, token } = res.data;
+
+      // Verify role matches selected tab
+      if (tab === 'patient' && user.role !== 'patient') {
+        setError("Ce compte n'est pas un compte patient.");
+        setLoading(false);
+        return;
+      }
+
+      if (tab === 'admin' && user.role !== 'admin') {
+        setError("Ce compte n'est pas un compte administrateur.");
+        setLoading(false);
+        return;
+      }
+
+      // Save token and user data
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+
+      // Redirect to appropriate dashboard
+      if (user.role === 'admin') {
+        window.location.href = '/admin/dashboard';
+      } else {
+        window.location.href = '/patient/dashboard';
+      }
+
+    } catch (err) {
+      setError(err.response?.data?.message || 'Code 2FA invalide ou expiré.');
       setLoading(false);
     }
   };
@@ -81,35 +148,73 @@ export default function Login() {
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-lg mb-4 text-sm">
-            ❌ {error}
+            <span className="text-red-600">Erreur:</span> {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-gray-600 text-sm mb-1 font-medium">Email</label>
-            <input type="email"
-              placeholder={tab === 'admin' ? 'admin@dental.com' : 'patient@dental.com'}
-              className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required />
+        {message && (
+          <div className="bg-green-50 border border-green-200 text-green-600 p-3 rounded-lg mb-4 text-sm">
+            <span className="text-green-600">Info:</span> {message}
           </div>
-          <div>
-            <label className="block text-gray-600 text-sm mb-1 font-medium">Mot de passe</label>
-            <input type="password" placeholder="••••••••"
-              className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required />
-          </div>
+        )}
 
-          <button type="submit" disabled={loading}
-            className="w-full text-white py-3 rounded-lg font-bold hover:opacity-90 disabled:opacity-50 transition"
-            style={{ backgroundColor: tab === 'admin' ? '#1a2b4a' : '#0d9488' }}>
-            {loading ? 'Connexion...' : 'Se connecter'}
-          </button>
-        </form>
+        {!show2FA ? (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-gray-600 text-sm mb-1 font-medium">Email</label>
+              <input type="email"
+                placeholder={tab === 'admin' ? 'admin@dental.com' : 'patient@dental.com'}
+                className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required />
+            </div>
+            <div>
+              <label className="block text-gray-600 text-sm mb-1 font-medium">Mot de passe</label>
+              <input type="password" placeholder=""
+                className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required />
+            </div>
+
+            <button type="submit" disabled={loading}
+              className="w-full text-white py-3 rounded-lg font-bold hover:opacity-90 disabled:opacity-50 transition"
+              style={{ backgroundColor: tab === 'admin' ? '#1a2b4a' : '#0d9488' }}>
+              {loading ? 'Connexion...' : 'Se connecter'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handle2FAVerification} className="space-y-4">
+            <div>
+              <label className="block text-gray-600 text-sm mb-1 font-medium">Code 2FA</label>
+              <input type="text"
+                placeholder="Entrez le code à 6 chiffres"
+                className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none text-center text-xl font-mono"
+                value={twoFACode}
+                onChange={e => setTwoFACode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                maxLength={6}
+                required />
+              <p className="text-gray-500 text-xs mt-1">Veuillez vérifier votre email pour le code à 6 chiffres.</p>
+            </div>
+
+            <button type="submit" disabled={loading || twoFACode.length !== 6}
+              className="w-full text-white py-3 rounded-lg font-bold hover:opacity-90 disabled:opacity-50 transition"
+              style={{ backgroundColor: tab === 'admin' ? '#1a2b4a' : '#0d9488' }}>
+              {loading ? 'Vérification...' : 'Vérifier le code'}
+            </button>
+
+            <button type="button" onClick={() => {
+              setShow2FA(false);
+              setTwoFACode('');
+              setError('');
+              setMessage('');
+            }}
+              className="w-full text-gray-600 py-2 rounded-lg font-bold hover:bg-gray-100 transition">
+              Annuler
+            </button>
+          </form>
+        )}
 
         {tab === 'patient' && (
           <div className="mt-5 text-center space-y-2">

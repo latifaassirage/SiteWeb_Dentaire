@@ -9,7 +9,7 @@ class DoctorController extends Controller
 {
     public function index()
     {
-        $doctors = User::whereIn('role', ['doctor', 'admin'])
+        $doctors = User::where('role', 'admin')
             ->select('id', 'name', 'email', 'phone')
             ->get();
         return response()->json($doctors);

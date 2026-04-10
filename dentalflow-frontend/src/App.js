@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Landing from './pages/Landing';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
+import VerifyEmail from './pages/auth/VerifyEmail';
 
 import PatientDashboard from './pages/patient/Dashboard';
 import BookAppointment from './pages/patient/BookAppointment';
@@ -23,7 +24,7 @@ function ProtectedRoute({ children, role }) {
 
   if (!token) return <Navigate to="/login" />;
 
-  if (role === 'admin' && user.role !== 'admin' && user.role !== 'doctor') {
+  if (role === 'admin' && user.role !== 'admin') {
     console.log('❌ Admin access denied - redirecting to login');
     return <Navigate to="/login" />;
   }
@@ -44,6 +45,7 @@ function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/verify-email/:token" element={<VerifyEmail />} />
 
         <Route path="/patient/dashboard" element={<ProtectedRoute role="patient"><PatientDashboard /></ProtectedRoute>} />
         <Route path="/patient/book" element={<ProtectedRoute role="patient"><BookAppointment /></ProtectedRoute>} />

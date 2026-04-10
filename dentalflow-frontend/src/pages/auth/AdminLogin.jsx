@@ -7,15 +7,39 @@ export default function AdminLogin() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [show2FA, setShow2FA] = useState(false);
+  const [twoFACode, setTwoFACode] = useState('');
+  const [userId, setUserId] = useState(null);
+  const [message, setMessage] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setMessage('');
     try {
       const res = await api.post('/login', form);
-      const { user, token } = res.data;
-      if (user.role !== 'admin' && user.role !== 'doctor') {
+      const data = res.data;
+
+      // Handle 2FA requirement
+      if (data.requires_2fa) {
+        setShow2FA(true);
+        setUserId(data.user_id);
+        setMessage('2FA code sent to your email. Please check your inbox.');
+        setLoading(false);
+        return;
+      }
+
+      // Handle email verification requirement
+      if (data.requires_email_verification) {
+        setError(data.message);
+        setLoading(false);
+        return;
+      }
+
+      // Normal login flow
+      const { user, token } = data;
+      if (user.role !== 'admin') {
         setError('Access denied. Admin only.');
         setLoading(false);
         return;
@@ -25,6 +49,34 @@ export default function AdminLogin() {
       window.location.href = '/admin/dashboard';
     } catch (err) {
       setError('Invalid email or password');
+      setLoading(false);
+    }
+  };
+
+  const handle2FAVerification = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await api.post('/verify-2fa', 
+        { user_id: userId, code: twoFACode }
+      );
+
+      const { user, token } = res.data;
+
+      if (user.role !== 'admin') {
+        setError('Access denied. Admin only.');
+        setLoading(false);
+        return;
+      }
+
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      window.location.href = '/admin/dashboard';
+
+    } catch (err) {
+      setError(err.response?.data?.message || 'Invalid or expired 2FA code.');
       setLoading(false);
     }
   };
@@ -42,32 +94,70 @@ export default function AdminLogin() {
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-lg mb-4 text-sm">
-            ❌ {error}
+            <span className="text-red-600">Erreur:</span> {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-gray-600 text-sm mb-1 font-medium">Admin Email</label>
-            <input type="email" placeholder="admin@dentalflow.ma"
-              className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:border-blue-500"
-              value={form.email}
-              onChange={e => setForm({...form, email: e.target.value})} />
+        {message && (
+          <div className="bg-green-50 border border-green-200 text-green-600 p-3 rounded-lg mb-4 text-sm">
+            <span className="text-green-600">Info:</span> {message}
           </div>
-          <div>
-            <label className="block text-gray-600 text-sm mb-1 font-medium">Password</label>
-            <input type="password" placeholder="••••••••"
-              className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:border-blue-500"
-              value={form.password}
-              onChange={e => setForm({...form, password: e.target.value})} />
-          </div>
+        )}
 
-          <button type="submit" disabled={loading}
-            style={{ backgroundColor: '#1a2b4a' }}
-            className="w-full text-white py-3 rounded-lg font-bold hover:opacity-90 disabled:opacity-50">
-            {loading ? 'Signing in...' : '🔐 Admin Sign In'}
-          </button>
-        </form>
+        {!show2FA ? (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-gray-600 text-sm mb-1 font-medium">Admin Email</label>
+              <input type="email" placeholder="admin@dentalflow.ma"
+                className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:border-blue-500"
+                value={form.email}
+                onChange={e => setForm({...form, email: e.target.value})} />
+            </div>
+            <div>
+              <label className="block text-gray-600 text-sm mb-1 font-medium">Password</label>
+              <input type="password" placeholder=""
+                className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:border-blue-500"
+                value={form.password}
+                onChange={e => setForm({...form, password: e.target.value})} />
+            </div>
+
+            <button type="submit" disabled={loading}
+              style={{ backgroundColor: '#1a2b4a' }}
+              className="w-full text-white py-3 rounded-lg font-bold hover:opacity-90 disabled:opacity-50">
+              {loading ? 'Signing in...' : ' Admin Sign In'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handle2FAVerification} className="space-y-4">
+            <div>
+              <label className="block text-gray-600 text-sm mb-1 font-medium">2FA Code</label>
+              <input type="text"
+                placeholder="Enter 6-digit code"
+                className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:border-blue-500 text-center text-xl font-mono"
+                value={twoFACode}
+                onChange={e => setTwoFACode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                maxLength={6}
+                required />
+              <p className="text-gray-500 text-xs mt-1">Check your email for the 6-digit code.</p>
+            </div>
+
+            <button type="submit" disabled={loading || twoFACode.length !== 6}
+              style={{ backgroundColor: '#1a2b4a' }}
+              className="w-full text-white py-3 rounded-lg font-bold hover:opacity-90 disabled:opacity-50">
+              {loading ? 'Verifying...' : 'Verify Code'}
+            </button>
+
+            <button type="button" onClick={() => {
+              setShow2FA(false);
+              setTwoFACode('');
+              setError('');
+              setMessage('');
+            }}
+              className="w-full text-gray-600 py-2 rounded-lg font-bold hover:bg-gray-100 transition">
+              Cancel
+            </button>
+          </form>
+        )}
 
         <div className="mt-6 text-center border-t pt-4">
           <button onClick={() => navigate('/')}

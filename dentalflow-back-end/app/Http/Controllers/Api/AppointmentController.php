@@ -115,7 +115,7 @@ class AppointmentController extends Controller
             }
 
             // Assign default doctor if not provided
-            $doctorId = $validated['doctor_id'] ?? User::where('role', 'admin')->orWhere('role', 'doctor')->first()->id;
+            $doctorId = $validated['doctor_id'] ?? User::where('role', 'admin')->first()->id;
 
             // Check for conflicts
             $conflict = Appointment::where('doctor_id', $doctorId)

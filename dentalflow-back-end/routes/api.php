@@ -12,10 +12,13 @@ use App\Http\Controllers\Api\DoctorController;
 use App\Http\Controllers\Api\TreatmentController;
 use App\Http\Controllers\Api\AdminNotificationController;
 use App\Http\Controllers\Api\ClinicSettingsController;
+use App\Http\Middleware\EnsureEmailIsVerified;
 
 // Public routes
 Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login',    [AuthController::class, 'login']);
+Route::middleware('throttle:5,15')->post('/login', [AuthController::class, 'login']);
+Route::post('/verify-email', [AuthController::class, 'verifyEmail']);
+Route::post('/verify-2fa', [AuthController::class, 'verify2FA']);
 Route::get('/treatments', [TreatmentController::class, 'index']);
 
 Route::get('/clinic-info', function () {
@@ -49,7 +52,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/my-appointments',           [AppointmentController::class, 'myAppointments']);
     Route::get('/appointments/available-slots', [AppointmentController::class, 'getAvailableSlots']);
     Route::post('/appointments/check',       [AppointmentController::class, 'checkAvailability']);
-    Route::post('/appointments',             [AppointmentController::class, 'store']);
+    Route::post('/appointments',             [AppointmentController::class, 'store'])->middleware('verified');
     Route::put('/appointments/{id}/cancel',  [AppointmentController::class, 'cancel']);
     Route::get('/my-invoices',               [InvoiceController::class, 'myInvoices']);
     Route::get('/my-unpaid-invoices',      [InvoiceController::class, 'myUnpaidInvoices']);
