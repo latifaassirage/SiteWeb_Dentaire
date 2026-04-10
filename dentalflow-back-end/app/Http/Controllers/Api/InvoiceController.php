@@ -29,7 +29,6 @@ class InvoiceController extends Controller
             'statuses' => $invoices->pluck('status')->unique()->toArray(),
             'unpaid_count' => $invoices->where('status', 'unpaid')->count(),
             'paid_count' => $invoices->where('status', 'paid')->count(),
-            'en_attente_count' => $invoices->where('status', 'en_attente_paiement')->count(),
         ]);
         
         // CRITICAL: Verify no auto-paid invoices
@@ -64,18 +63,18 @@ class InvoiceController extends Controller
             return response()->json($existing, 200);
         }
         
-        $request->validate([
+        $validated = $request->validate([
             'patient_id'     => 'required|exists:users,id',
             'appointment_id' => 'required|exists:appointments,id',
             'amount'         => 'required|numeric|min:0',
-            'status'         => 'required|in:en_attente_paiement,unpaid,paid',
+            'status'         => 'required|in:unpaid,paid',
         ]);
 
         $invoice = Invoice::create([
             'patient_id'     => $request->patient_id,
             'appointment_id' => $request->appointment_id,
             'amount'         => $request->amount,
-            'status'         => 'en_attente_paiement',
+            'status'         => 'unpaid',
             'issued_at'      => now(),
         ]);
 
@@ -166,12 +165,11 @@ class InvoiceController extends Controller
         $total = Invoice::where('status', 'paid')
             ->sum('amount');
 
-        $unpaid = Invoice::where('status', 'unpaid')
+        $unpaid = Invoice::whereIn('status', ['unpaid', 'en_attente_paiement'])
             ->count();
 
         // Total Pending = sum of amounts for invoices that are unpaid or en_attente_paiement
-        $totalPending = Invoice::where('status', 'unpaid')
-            ->orWhere('status', 'en_attente_paiement')
+        $totalPending = Invoice::whereIn('status', ['unpaid', 'en_attente_paiement'])
             ->sum('amount');
 
         $totalTransactions = Invoice::count();
@@ -245,7 +243,7 @@ class InvoiceController extends Controller
                         'patient_id' => $appointment->patient_id,
                         'appointment_id' => $appointment->id,
                         'amount' => $appointment->treatment->price ?? 0,
-                        'status' => 'en_attente_paiement',
+                        'status' => 'unpaid',
                         'issued_at' => $appointment->start_time,
                         'paid_at' => null,
                         'payment_date' => null,

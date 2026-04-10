@@ -214,7 +214,7 @@ export default function Finance() {
                     </span>
                   </td>
                   <td className="p-4 border-r border-gray-100">
-                    {inv.status === 'unpaid' || inv.status === 'en_attente_paiement' ? (
+                    {inv.status === 'unpaid' ? (
                       <button 
                         onClick={() => handlePay(inv)}
                         className="bg-orange-500 text-white px-3 py-2 rounded-lg text-xs font-medium hover:bg-orange-600 transition-colors shadow-sm w-full"

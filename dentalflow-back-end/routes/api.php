@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\DoctorController;
 use App\Http\Controllers\Api\TreatmentController;
 use App\Http\Controllers\Api\AdminNotificationController;
+use App\Http\Controllers\Api\ClinicSettingsController;
 
 // Public routes
 Route::post('/register', [AuthController::class, 'register']);
@@ -39,8 +40,13 @@ Route::middleware('auth:sanctum')->group(function () {
     // Doctors list (for booking)
     Route::get('/doctors', [DoctorController::class, 'index']);
 
+    // Clinic settings
+    Route::get('/clinic-settings', [ClinicSettingsController::class, 'index']);
+    Route::get('/clinic-settings/working-hours', [ClinicSettingsController::class, 'getWorkingHours']);
+
     // Patient routes
     Route::get('/my-appointments',           [AppointmentController::class, 'myAppointments']);
+    Route::get('/appointments/available-slots', [AppointmentController::class, 'getAvailableSlots']);
     Route::post('/appointments/check',       [AppointmentController::class, 'checkAvailability']);
     Route::post('/appointments',             [AppointmentController::class, 'store']);
     Route::put('/appointments/{id}/cancel',  [AppointmentController::class, 'cancel']);
@@ -191,38 +197,4 @@ Route::middleware('auth:sanctum')->get('/treatments', function () {
     return response()->json(
         App\Models\Treatment::orderBy('name')->get()
     );
-});
-
-Route::middleware('auth:sanctum')->post('/treatments', function (\Illuminate\Http\Request $request) {
-    $request->validate([
-        'name' => 'required|string|max:255',
-        'description' => 'nullable|string',
-        'category' => 'required|string|max:100',
-        'price' => 'required|numeric|min:0',
-        'duration' => 'required|integer|min:15|max:240'
-    ]);
-    
-    $treatment = App\Models\Treatment::create($request->all());
-    return response()->json($treatment, 201);
-});
-
-Route::middleware('auth:sanctum')->put('/treatments/{id}', function (\Illuminate\Http\Request $request, $id) {
-    $treatment = App\Models\Treatment::findOrFail($id);
-    
-    $request->validate([
-        'name' => 'required|string|max:255',
-        'description' => 'nullable|string',
-        'category' => 'required|string|max:100',
-        'price' => 'required|numeric|min:0',
-        'duration' => 'required|integer|min:15|max:240'
-    ]);
-    
-    $treatment->update($request->all());
-    return response()->json($treatment);
-});
-
-Route::middleware('auth:sanctum')->delete('/treatments/{id}', function ($id) {
-    $treatment = App\Models\Treatment::findOrFail($id);
-    $treatment->delete();
-    return response()->json(['message' => 'Treatment deleted successfully']);
 });

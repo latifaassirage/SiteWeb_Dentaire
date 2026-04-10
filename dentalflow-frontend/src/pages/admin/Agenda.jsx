@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import AdminNavbar from '../../components/AdminNavbar.jsx';
 
-const HOURS = Array.from({ length: 10 }, (_, i) => i + 8);
+const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8:00 to 20:00 (13 hours)
 const DAYS = ['LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
 
 const statusColors = {
@@ -212,7 +212,9 @@ export default function Agenda() {
                 <div className="p-3 border-r bg-gradient-to-r from-gray-50 to-gray-100 text-xs font-semibold text-gray-600 text-right pr-4">
                   <div className="flex flex-col items-end">
                     <span>{hour}:00</span>
-                    <span className="text-gray-400 text-xs mt-1">{hour + 1}:00</span>
+                    <span className="text-gray-400 text-xs mt-1">
+                      {hour < 20 ? `${hour + 1}:00` : '20:00'}
+                    </span>
                   </div>
                 </div>
                 {weekDays.map((day, i) => {

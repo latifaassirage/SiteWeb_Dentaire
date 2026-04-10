@@ -63,7 +63,8 @@ class DashboardController extends Controller
                 'appointments_today' => Appointment::whereDate('start_time', today())
                     ->whereIn('status', ['confirmé', 'terminé'])
                     ->count() ?? 0,
-                'en_attente_count' => $enAttentePatients->count(),
+                'unpaid_invoices' => Invoice::where('status', 'unpaid')->count(), // FIXED: Count unpaid invoices only
+                'unpaid_amount' => Invoice::where('status', 'unpaid')->sum('amount') ?? 0, // NEW: Total unpaid amount
                 'confirmed' => Appointment::where('status', 'confirmé')->count(),
                 'completed' => Appointment::where('status', 'terminé')->count(),
                 'total_patients' => User::where('role', 'patient')->count() ?? 0,
@@ -72,7 +73,7 @@ class DashboardController extends Controller
             // Fix 4: Pending Payments - Sum of terminé appointments that are not paid
             $pendingPayments = Appointment::join('invoices', 'appointments.id', '=', 'invoices.appointment_id')
                 ->where('appointments.status', 'terminé')
-                ->where('invoices.status', '!=', 'paid')
+                ->where('invoices.status', 'unpaid')
                 ->sum('invoices.amount');
             
             $stats['pending_payments'] = (float) $pendingPayments ?: 0;

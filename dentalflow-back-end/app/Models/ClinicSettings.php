@@ -59,9 +59,30 @@ class ClinicSettings extends Model
     public static function getWorkingHours()
     {
         return [
-            'monday_friday' => static::get('monday_friday', ['08:00-13:00', '14:00-18:00']),
+            'opening_time' => static::get('opening_time', '08:00'),
+            'closing_time' => static::get('closing_time', '18:30'),
+            'saturday_closing_time' => static::get('saturday_closing_time', '14:00'), // Saturday-specific closing
+            'lunch_start' => static::get('lunch_start', '13:00'),
+            'lunch_end' => static::get('lunch_end', '14:00'),
+            'monday_friday' => static::get('monday_friday', ['08:00-13:00', '14:00-18:30']),
             'saturday' => static::get('saturday', '08:00-14:30'),
             'sunday' => static::get('sunday', 'Fermé'),
+        ];
+    }
+
+    /**
+     * Get available working days for patients
+     */
+    public static function getAvailableDays()
+    {
+        return [
+            'monday'    => static::get('monday_enabled', true),
+            'tuesday'   => static::get('tuesday_enabled', true),
+            'wednesday' => static::get('wednesday_enabled', true),
+            'thursday'  => static::get('thursday_enabled', true),
+            'friday'    => static::get('friday_enabled', true),
+            'saturday'  => static::get('saturday_enabled', false), // Disabled for patients
+            'sunday'    => static::get('sunday_enabled', false), // Disabled for patients
         ];
     }
 

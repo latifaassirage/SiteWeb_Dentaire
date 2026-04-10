@@ -37,6 +37,24 @@ class ClinicSettingsController extends Controller
     }
 
     /**
+     * Get working hours specifically for booking
+     */
+    public function getWorkingHours()
+    {
+        try {
+            $workingHours = ClinicSettings::getWorkingHours();
+            
+            return response()->json([
+                'success' => true,
+                'data' => $workingHours
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching working hours:', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to fetch working hours'], 500);
+        }
+    }
+
+    /**
      * Update clinic basic info
      */
     public function updateClinicInfo(Request $request)

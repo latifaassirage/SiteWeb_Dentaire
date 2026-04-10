@@ -73,78 +73,99 @@ class AppointmentController extends Controller
     // Patient: حجز موعد
     public function store(Request $request)
     {
-        $request->validate([
-            'doctor_id'    => 'sometimes|exists:users,id',
+        $validated = $request->validate([
             'treatment_id' => 'required|exists:treatments,id',
+            'doctor_id'    => 'sometimes|exists:users,id',
             'start_time'   => 'required|date|after:now',
             'end_time'     => 'required|date|after:start_time',
         ]);
 
-        // Assign default doctor if not provided
-        $doctorId = $request->doctor_id ?? User::where('role', 'admin')->orWhere('role', 'doctor')->first()->id;
+        try {
+            // Get treatment duration
+            $treatment = Treatment::find($validated['treatment_id']);
+            $duration = $treatment ? $treatment->duration : 30;
 
-        // Enhanced conflict check - prevent double-booking same slot
-        $conflict = Appointment::where('doctor_id', $doctorId)
-            ->where('status', '!=', 'annulé')
-            ->where(function ($q) use ($request) {
-                $q->whereBetween('start_time', [$request->start_time, $request->end_time])
-                  ->orWhereBetween('end_time', [$request->start_time, $request->end_time])
-                  ->orWhere(function ($q2) use ($request) {
-                      $q2->where('start_time', '<=', $request->start_time)
-                         ->where('end_time', '>=', $request->end_time);
-                  });
-            })->exists();
-
-        if ($conflict) {
-            return response()->json([
-                'message' => 'Ce créneau est déjà réservé. Veuillez choisir un autre horaire.'
-            ], 422);
-        }
-
-        // Create appointment with "En attente" status by default
-        $appointment = Appointment::create([
-            'patient_id'   => $request->user()->id,
-            'doctor_id'    => $doctorId,
-            'treatment_id' => $request->treatment_id,
-            'start_time'   => $request->start_time,
-            'end_time'     => $request->end_time,
-            'status'       => 'en_attente', // Default status
-        ]);
-
-        // Create admin notification for new appointment
-        $treatment = Treatment::find($request->treatment_id);
-        AdminNotification::createNotification(
-            "New appointment booked by {$request->user()->name}",
-            'new_appointment',
-            [
-                'appointment_id' => $appointment->id,
-                'patient_id' => $request->user()->id,
-                'patient_name' => $request->user()->name,
-                'treatment_id' => $request->treatment_id,
-                'treatment_name' => $treatment?->name,
-                'start_time' => $appointment->start_time->format('Y-m-d H:i:s'),
-            ]
-        );
-
-        // Send notification to all admin users
-        $admins = User::where('role', 'admin')->get();
-        
-        // Debug: Log the admin users we found
-        \Log::info('Found admin users for notification:', ['count' => $admins->count()]);
-        
-        foreach ($admins as $admin) {
-            if ($admin instanceof User) {
-                \Log::info('Sending notification to admin:', ['admin_id' => $admin->id, 'admin_name' => $admin->name]);
-                $admin->notify(new AppointmentBooked($appointment, $request->user(), $treatment));
-            } else {
-                \Log::warning('Admin is not a User instance:', ['admin' => get_class($admin)]);
+            // Get clinic working hours for validation
+            $workingHours = \App\Models\ClinicSettings::getWorkingHours();
+            $openingTime = $workingHours['opening_time'] ?? '08:00';
+            $closingTime = $workingHours['closing_time'] ?? '18:30';
+            $lunchStart = $workingHours['lunch_start'] ?? '13:00';
+            $lunchEnd = $workingHours['lunch_end'] ?? '14:00';
+            
+            $appointmentDate = date('Y-m-d', strtotime($validated['start_time']));
+            $dayOfWeek = date('N', strtotime($appointmentDate));
+            
+            // Validate day is available for patients (Mon-Fri only)
+            if ($dayOfWeek < 1 || $dayOfWeek > 5) {
+                return response()->json(['error' => 'Appointments only available Monday to Friday'], 422);
             }
-        }
+            
+            $appointmentTime = date('H:i', strtotime($validated['start_time']));
+            $endTime = date('H:i', strtotime($validated['end_time']));
+            
+            // Validate appointment is within working hours
+            if ($appointmentTime < $openingTime || $endTime > $closingTime) {
+                return response()->json(['error' => 'Appointment time is outside clinic working hours'], 422);
+            }
+            
+            // Validate appointment doesn't fall during lunch break
+            if ($appointmentTime >= $lunchStart && $appointmentTime < $lunchEnd) {
+                return response()->json(['error' => 'Appointment time conflicts with lunch break'], 422);
+            }
 
-        return response()->json(
-            $appointment->load(['treatment', 'doctor', 'patient']),
-            201
-        );
+            // Assign default doctor if not provided
+            $doctorId = $validated['doctor_id'] ?? User::where('role', 'admin')->orWhere('role', 'doctor')->first()->id;
+
+            // Check for conflicts
+            $conflict = Appointment::where('doctor_id', $doctorId)
+                ->where('status', '!=', 'annulé')
+                ->where(function ($q) use ($validated) {
+                    $q->whereBetween('start_time', [$validated['start_time'], $validated['end_time']])
+                      ->orWhereBetween('end_time', [$validated['start_time'], $validated['end_time']]);
+                })
+                ->first();
+
+            if ($conflict) {
+                return response()->json(['error' => 'This time slot is already booked'], 422);
+            }
+
+            $appointment = Appointment::create([
+                'patient_id'   => $request->user()->id,
+                'treatment_id' => $validated['treatment_id'],
+                'doctor_id'    => $doctorId,
+                'start_time'   => $validated['start_time'],
+                'end_time'     => $validated['end_time'],
+                'status'       => 'en_attente',
+            ]);
+
+            // Create admin notification for new appointment
+            $treatment = Treatment::find($validated['treatment_id']);
+            AdminNotification::createNotification(
+                "New appointment booked by {$request->user()->name}",
+                'new_appointment',
+                [
+                    'treatment' => $treatment->name,
+                    'time' => $appointment->start_time,
+                    'patient' => $request->user()->name
+                ]
+            );
+
+            // Send notification to patient
+            Notification::create([
+                'user_id' => $request->user()->id,
+                'message' => "Your appointment has been booked successfully",
+                'type' => 'appointment_booked',
+            ]);
+
+            return response()->json([
+                'message' => 'Appointment booked successfully',
+                'appointment' => $appointment->load(['patient', 'doctor', 'treatment'])
+            ], 201);
+
+        } catch (\Exception $e) {
+            \Log::error('Error creating appointment:', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to create appointment'], 500);
+        }
     }
 
     // Patient: إلغاء موعد فقط قبل 24h
@@ -295,14 +316,14 @@ class AppointmentController extends Controller
                     'price' => $treatmentPrice
                 ]);
                 
-                // Step B: Create Invoice (if not exists) - status = 'en_attente_paiement'
+                // Step B: Create Invoice (if not exists) - status = 'unpaid'
                 $existingInvoice = Invoice::where('appointment_id', $appointment->id)->first();
                 if (!$existingInvoice) {
                     $invoice = Invoice::create([
                         'appointment_id' => $appointment->id,
                         'patient_id'     => $appointment->patient_id,
                         'amount'         => $treatmentPrice,
-                        'status'         => 'en_attente_paiement', // Create as en_attente_paiement, admin can mark as paid later
+                        'status'         => 'unpaid', // Create as unpaid, admin can mark as paid later
                         'issued_at'      => now(),
                     ]);
                     
@@ -357,6 +378,78 @@ class AppointmentController extends Controller
     }
 
     // Admin: تعديل موعد (Drag & Drop)
+    /**
+     * Get available time slots based on clinic settings and treatment duration
+     */
+    public function getAvailableSlots(Request $request)
+    {
+        try {
+            $clinicSettings = \App\Models\ClinicSettings::getWorkingHours();
+            $date = $request->date;
+            $treatmentId = $request->treatment_id;
+            
+            // Get treatment duration
+            $treatment = Treatment::find($treatmentId);
+            $duration = $treatment ? $treatment->duration : 30; // Default 30 mins
+            
+            // Get clinic working hours
+            $openingTime = $clinicSettings['opening_time'] ?? '08:00';
+            $closingTime = $clinicSettings['closing_time'] ?? '18:30';
+            $lunchStart = $clinicSettings['lunch_start'] ?? '13:00';
+            $lunchEnd = $clinicSettings['lunch_end'] ?? '14:00';
+            
+            // Parse working hours for the day
+            $dayOfWeek = date('N', strtotime($date)); // 1=Monday, 7=Sunday
+            
+            // Check if day is enabled for patients (Mon-Fri only)
+            if ($dayOfWeek >= 1 && $dayOfWeek <= 5) { // Monday-Friday
+                $daySchedule = $clinicSettings['monday_friday'] ?? ['08:00-13:00', '14:00-18:00'];
+                $closingTime = $clinicSettings['closing_time'] ?? '18:00'; // Use weekday closing time
+            } elseif ($dayOfWeek == 6) { // Saturday
+                $daySchedule = [$clinicSettings['saturday'] ?? '08:00-14:30'];
+                $closingTime = $clinicSettings['saturday_closing_time'] ?? '14:00'; // Use Saturday closing time
+            } else { // Sunday
+                return response()->json(['slots' => [], 'message' => 'Clinic closed on Sundays']);
+            }
+            
+            $availableSlots = [];
+            
+            foreach ($daySchedule as $schedule) {
+                if ($schedule === 'Fermé') continue;
+                
+                // Parse schedule times
+                list($scheduleStart, $scheduleEnd) = explode('-', $schedule);
+                $scheduleStartHour = (int)substr($scheduleStart, 0, 2);
+                $scheduleEndHour = (int)substr($scheduleEnd, 0, 2);
+                
+                // Generate slots for this schedule
+                $currentSlot = $scheduleStartHour;
+                while ($currentSlot < $scheduleEndHour) {
+                    $slotEndTime = $currentSlot + ($duration / 60);
+                    
+                    // Skip lunch break
+                    if ($currentSlot >= 13 && $currentSlot < 14) {
+                        $currentSlot = 14; // Jump to after lunch
+                        continue;
+                    }
+                    
+                    // Ensure slot doesn't exceed closing time
+                    if ($slotEndTime <= $scheduleEndHour) {
+                        $availableSlots[] = sprintf('%02d:00', $currentSlot);
+                    }
+                    
+                    $currentSlot++; // Next hour slot
+                }
+            }
+            
+            return response()->json(['slots' => $availableSlots]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Error getting available slots:', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to get available slots'], 500);
+        }
+    }
+
     public function update(Request $request, $id)
     {
         $appointment = Appointment::findOrFail($id);
@@ -398,7 +491,7 @@ class AppointmentController extends Controller
                     'appointment_id' => $appointment->id,
                     'patient_id' => $appointment->patient_id,
                     'amount' => $price,
-                    'status' => 'en_attente_paiement',
+                    'status' => 'unpaid',
                     'issued_at' => now()->format('Y-m-d H:i:s')
                 ]);
                 
@@ -406,7 +499,7 @@ class AppointmentController extends Controller
                     'appointment_id' => $appointment->id,
                     'patient_id' => $appointment->patient_id,
                     'amount' => $price,
-                    'status' => 'en_attente_paiement', // CRITICAL: Do NOT set to 'paid' automatically
+                    'status' => 'unpaid', // CRITICAL: Do NOT set to 'paid' automatically
                     'issued_at' => now()->format('Y-m-d H:i:s')
                 ]);
                 
@@ -585,12 +678,12 @@ class AppointmentController extends Controller
                     'paid_at' => now(),
                 ]);
             } else {
-                // Create new invoice if it doesn't exist - start as en_attente_paiement
+                // Create new invoice if it doesn't exist - start as unpaid
                 $invoice = Invoice::create([
                     'patient_id' => $appointment->patient_id,
                     'appointment_id' => $appointment->id,
                     'amount' => $appointment->treatment->price ?? 0,
-                    'status' => 'en_attente_paiement', // CRITICAL: Start as en_attente_paiement
+                    'status' => 'unpaid', // CRITICAL: Start as unpaid
                     'issued_at' => now(),
                     // paid_at stays NULL until manual confirmation
                 ]);

@@ -123,10 +123,21 @@ export default function AdminDashboard() {
                 {/* Today's Appointments */}
                 <div className="bg-white rounded-xl shadow p-5">
                   <p className="text-gray-500 text-sm font-medium">Aujourd'hui</p>
-                  <p className="text-gray-400 text-xs mb-2">Rendez-vous du jour</p>
-                  <p className="text-3xl font-bold text-gray-800">{appointments.filter(a => new Date(a.start_time).toDateString() === new Date().toDateString()).length}</p>
+                  <p className="text-3xl font-bold text-gray-800 mt-1">
+              {appointments.filter(a => new Date(a.start_time).toDateString() === new Date().toDateString()).length}
+                  </p>
                   <p className="text-blue-500 text-sm mt-1">📅 Consultations aujourd'hui</p>
                   <p className="text-gray-400 text-sm mt-3">{appointments.filter(a => a.status === 'en_attente').length} en attente</p>
+                </div>
+                
+                {/* Unpaid Invoices */}
+                <div className="bg-white rounded-xl shadow p-5">
+                  <p className="text-gray-500 text-sm font-medium">Factures Impayées</p>
+                  <p className="text-3xl font-bold text-gray-800">{stats.unpaid_invoices || 0}</p>
+                  <p className="text-orange-500 text-sm mt-1">
+                    {(stats.unpaid_amount || 0).toLocaleString()} MAD en attente
+                  </p>
+                  <p className="text-gray-400 text-sm mt-3">Total des factures en attente</p>
                 </div>
 
                 {/* Total Revenue */}

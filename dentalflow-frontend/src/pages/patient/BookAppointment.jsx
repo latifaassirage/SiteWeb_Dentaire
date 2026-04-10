@@ -24,18 +24,96 @@ export default function BookAppointment() {
   const [selectedTreatment, setSelectedTreatment] = useState(null);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [availableSlots, setAvailableSlots] = useState([]);
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [clinicSettings, setClinicSettings] = useState(null);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-  // Available time slots
-  const timeSlots = [
-    '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
-    '11:00', '11:30', '14:00', '14:30', '15:00', '15:30',
-    '16:00', '16:30', '17:00', '17:30'
-  ];
+  // Fetch clinic settings on component mount
+  useEffect(() => {
+    fetchClinicSettings();
+  }, []);
+
+  // Fetch clinic settings and available slots when date and treatment are selected
+  useEffect(() => {
+    if (selectedDate && selectedTreatment && clinicSettings) {
+      generateAvailableSlots();
+    }
+  }, [selectedDate, selectedTreatment, clinicSettings]);
+
+  const fetchClinicSettings = async () => {
+    try {
+      const response = await api.get('/clinic-settings/working-hours');
+      if (response.data.success) {
+        setClinicSettings(response.data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching clinic settings:', err);
+    }
+  };
+
+  const generateAvailableSlots = () => {
+    if (!selectedDate || !selectedTreatment || !clinicSettings) return;
+
+    const dayOfWeek = new Date(selectedDate).getDay(); // 0=Sunday, 1=Monday
+    
+    // Check if day is available for patients (Mon-Fri only)
+    if (dayOfWeek === 0) { // Sunday
+      setAvailableSlots([]);
+      return;
+    }
+    
+    // Get clinic working hours from settings
+    const openingTime = clinicSettings.opening_time || '08:00';
+    let closingTime = clinicSettings.closing_time || '18:30';
+    const lunchStart = clinicSettings.lunch_start || '13:00';
+    const lunchEnd = clinicSettings.lunch_end || '14:00';
+    
+    // Different closing time for Saturday
+    if (dayOfWeek === 6) { // Saturday
+      closingTime = clinicSettings.saturday_closing_time || '14:00'; // Use Saturday-specific closing time
+    }
+    
+    const slots = [];
+    const treatmentDuration = selectedTreatment.duration || 30;
+    
+    // Parse opening and closing times
+    const [openHour] = openingTime.split(':').map(Number);
+    const [closeHour] = closingTime.split(':').map(Number);
+    
+    // Generate hourly slots with day-specific closing times
+    let currentSlot = openHour;
+    let maxSlot = closeHour;
+    
+    // Adjust maximum slot based on day of week
+    if (dayOfWeek === 6) { // Saturday
+      maxSlot = 14; // Saturday: last slot is 13:00 (60min treatment finishes 14:00)
+    } else {
+      maxSlot = 17; // Weekday: last slot is 17:00 (60min treatment finishes 18:00)
+    }
+    
+    while (currentSlot <= maxSlot) {
+      const slotEndTime = currentSlot + (treatmentDuration / 60);
+      
+      // Skip lunch break
+      if (currentSlot >= 13 && currentSlot < 14) {
+        currentSlot = 14; // Jump to after lunch
+        continue;
+      }
+      
+      // Ensure slot doesn't exceed closing time
+      if (slotEndTime <= closeHour) {
+        slots.push(`${currentSlot.toString().padStart(2, '0')}:00`);
+      }
+      
+      currentSlot++; // Next hour slot
+    }
+    
+    setAvailableSlots(slots);
+  };
 
   useEffect(() => {
     api.get('/treatments').then(r => setTreatments(r.data)).catch(() => {});
@@ -60,7 +138,7 @@ export default function BookAppointment() {
     return `${selectedDate} ${selectedTime}:00`;
   };
 
-  // التحقق من تعارض المواعيد
+  // التحقق من التوفر مع التحقق الذكي من المدة
   const checkAvailability = async () => {
     if (!selectedDate || !selectedTime || !selectedTreatment) return false;
     setChecking(true);
@@ -69,16 +147,22 @@ export default function BookAppointment() {
       const startTime = getStartDateTime();
       const endTime = calculateEndTime(selectedDate, selectedTime, selectedTreatment.duration);
       
-      // جرب ترسل request للـ API باش تتحقق
-      await api.post('/appointments/check', {
-        doctor_id:  doctorId,
+      // Smart duration check: API already handles this
+      const response = await api.post('/appointments/check', {
+        doctor_id: doctorId,
         start_time: startTime,
         end_time:   endTime,
       });
+      
       setChecking(false);
-      return true;
+      if (response.data.available) {
+        return true;
+      } else {
+        setError(response.data.message || 'Ce créneau n\'est pas disponible pour la durée de ce traitement.');
+        return false;
+      }
     } catch (err) {
-      setError(err.response?.data?.message || 'Ce créneau est déjà réservé. Veuillez choisir un autre horaire.');
+      setError(err.response?.data?.message || 'Erreur lors de la vérification de disponibilité.');
       setChecking(false);
       return false;
     }
@@ -265,18 +349,25 @@ export default function BookAppointment() {
                 <div>
                   <label className="block text-gray-600 text-sm mb-2 font-medium">🕐 Heure de début</label>
                   <div className="grid grid-cols-4 gap-2">
-                    {timeSlots.map(time => (
-                      <button key={time}
-                        onClick={() => { setSelectedTime(time); setError(''); }}
-                        className={`py-2 px-3 rounded-lg text-sm font-medium border transition ${
-                          selectedTime === time
-                            ? 'text-white border-transparent'
-                            : 'bg-white border-gray-200 text-gray-600 hover:border-teal-300'
-                        }`}
-                        style={selectedTime === time ? { backgroundColor: '#0d9488' } : {}}>
-                        {time}
-                      </button>
-                    ))}
+                    {availableSlots.length > 0 ? (
+                      availableSlots.map(time => (
+                        <button key={time}
+                          onClick={() => { setSelectedTime(time); setError(''); }}
+                          className={`py-2 px-3 rounded-lg text-sm font-medium border transition ${
+                            selectedTime === time
+                              ? 'text-white border-transparent'
+                              : 'bg-white border-gray-200 text-gray-600 hover:border-teal-300'
+                          }`}
+                          style={selectedTime === time ? { backgroundColor: '#0d9488' } : {}}>
+                          {time}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="col-span-4 text-center text-gray-500 py-4">
+                        <p className="text-sm">Aucun créneau disponible</p>
+                        <p className="text-xs mt-1">Veuillez choisir une autre date</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

@@ -231,13 +231,21 @@ export default function Settings() {
       setError('');
       setSuccess('');
       
-      await api.put(`/treatments/${id}`, updates);
+      const response = await api.put(`/treatments/${id}`, updates);
+      
+      // Update local state with the response data
+      if (response.data.treatment) {
+        setTreatments(prev => 
+          prev.map(t => t.id === id ? response.data.treatment : t)
+        );
+      }
+      
       setSuccess('Treatment updated successfully!');
       setTimeout(() => setSuccess(''), 3000);
-      fetchTreatments();
     } catch (err) {
       console.error('Error updating treatment:', err);
-      setError('Failed to update treatment');
+      setError(err.response?.data?.message || 'Failed to update treatment');
+      setTimeout(() => setError(''), 5000);
     } finally {
       setLoading(false);
     }
